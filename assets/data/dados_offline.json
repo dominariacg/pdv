@@ -1,5 +1,5 @@
 {
-    "version": "0.0.0.0.0.7",
+    "version": "0.0.0.0.0.8",
     "products": [
         {
             "barcode": "",
@@ -37472,6 +37472,24 @@
             "valores_pagos": "",
             "desconto": 0.0,
             "valor_total": null
+        },
+        {
+            "timestamp": "2025-08-27T15:23:43.941Z",
+            "vendedor": "Admin",
+            "produtos": "1x BOX YGO LEGENDARY COLLECTION 25TH ANNIVERSARY",
+            "formas_pagamento": "Cartão de Débito",
+            "valores_pagos": "200.00",
+            "desconto": 0.0,
+            "valor_total": 200.0
+        },
+        {
+            "timestamp": "2025-08-27T15:28:51.333Z",
+            "vendedor": "Admin",
+            "produtos": "4x PROTETOR CENTRAL STANDARD TRANSPARENTE (SAQUINHO), 1x DECK BOX GAMEGENIC HOLDER 100+ VERMELHO",
+            "formas_pagamento": "Cartão de Débito",
+            "valores_pagos": "73.00",
+            "desconto": 0.0,
+            "valor_total": 73.0
         }
     ]
 }
