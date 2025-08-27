@@ -20,7 +20,7 @@ def get_all_data(conn):
 def apply_changes_incrementally(conn, changes):
     """
     Aplica as alterações de forma inteligente, verificando a existência
-    dos registros antes de inserir ou atualizar para evitar duplicatas e erros.
+    dos registros antes de inserir, atualizar ou excluir.
     """
     cursor = conn.cursor()
     
@@ -30,7 +30,6 @@ def apply_changes_incrementally(conn, changes):
         
         try:
             if action == 'create_product':
-                # Verifica se o produto já existe antes de inserir
                 cursor.execute("SELECT cod FROM products WHERE cod = ?", (details['cod'],))
                 if cursor.fetchone() is None:
                     cursor.execute(
@@ -42,7 +41,6 @@ def apply_changes_incrementally(conn, changes):
                     print(f"  -> Produto já existe, ignorando: {details['cod']}")
 
             elif action == 'pair_product' or action == 'adjust_stock':
-                # Ações de atualização são seguras por natureza (UPDATE)
                 cursor.execute(
                     'UPDATE products SET barcode = ?, estoque = ? WHERE cod = ?',
                     (details.get('newBarcode'), details.get('newStock'), details['cod'])
@@ -50,7 +48,6 @@ def apply_changes_incrementally(conn, changes):
                 print(f"  -> Produto atualizado: {details['cod']}")
 
             elif action == 'create_user':
-                # Verifica se o usuário já existe
                 cursor.execute("SELECT username FROM users WHERE username = ?", (details['username'],))
                 if cursor.fetchone() is None:
                     cursor.execute(
@@ -62,17 +59,26 @@ def apply_changes_incrementally(conn, changes):
                     print(f"  -> Usuário já existe, ignorando: {details['username']}")
 
             elif action == 'create_sale':
-                # Usa o timestamp como identificador único para evitar vendas duplicadas
                 cursor.execute("SELECT timestamp FROM vendas_log WHERE timestamp = ?", (details['timestamp'],))
                 if cursor.fetchone() is None:
+                    # Formata a lista de produtos para uma string legível antes de salvar
+                    produtos_str = ", ".join([f"{p['quantity']}x {p['name']}" for p in details['produtos']])
                     cursor.execute(
                         'INSERT INTO vendas_log (timestamp, vendedor, produtos, formas_pagamento, valores_pagos, desconto, valor_total) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                        (details['timestamp'], details['vendedor'], details['produtos'], details['formas_pagamento'], details['valores_pagos'], details['desconto'], details['valor_total'])
+                        (details['timestamp'], details['vendedor'], produtos_str, details['formas_pagamento'], details['valores_pagos'], details['desconto'], details['valor_total'])
                     )
                     print(f"  -> Venda registrada: {details['timestamp']}")
                 else:
                     print(f"  -> Venda já existe, ignorando: {details['timestamp']}")
-        
+            
+            # ATUALIZAÇÃO: Adiciona a lógica para excluir uma venda
+            elif action == 'delete_sale':
+                cursor.execute("DELETE FROM vendas_log WHERE timestamp = ?", (details['timestamp'],))
+                if cursor.rowcount > 0:
+                    print(f"  -> Venda excluída: {details['timestamp']}")
+                else:
+                    print(f"  -> Venda para excluir não encontrada, ignorando: {details['timestamp']}")
+
         except sqlite3.Error as e:
             print(f"  -> Erro no banco de dados ao processar a ação '{action}' para '{details}': {e}")
 
@@ -100,7 +106,6 @@ def main():
     else:
         print("Nenhuma alteração para aplicar.")
 
-    # Após aplicar, busca todos os dados para gerar o novo JSON
     products, users, vendas_log = get_all_data(conn)
     
     json_output_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data', 'dados_offline.json')
@@ -112,7 +117,7 @@ def main():
             version_parts[-1] = str(int(version_parts[-1]) + 1)
             version = ".".join(version_parts)
     except (FileNotFoundError, json.JSONDecodeError):
-        pass # Usa a versão padrão
+        pass
 
     output_data = {
         "version": version,
