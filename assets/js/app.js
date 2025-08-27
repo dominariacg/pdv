@@ -739,8 +739,9 @@ function exportSalesToXLSX() {
         return;
     }
 
+    // --- CABEÇALHO COM A NOVA ORDEM DE COLUNAS ---
     const dataForSheet = [
-        ['Data/Hora', 'Vendedor', 'COD Produto', 'Descrição do Item', 'Qtd', 'Preço Unit.', 'Subtotal Item']
+        ['Data/Hora', 'Vendedor', 'Qtd', 'COD Produto', 'Descrição do Item', 'Preço Unit.', 'Subtotal Item']
     ];
     
     const paymentSummary = {}; // Objeto para somar os pagamentos
@@ -748,7 +749,7 @@ function exportSalesToXLSX() {
     sales.forEach(sale => {
         const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
 
-        // --- Processa e soma os pagamentos de cada venda ---
+        // Processa e soma os pagamentos de cada venda
         if (sale.formas_pagamento && sale.valores_pagos) {
             const methods = sale.formas_pagamento.split(',').map(m => m.trim());
             const values = sale.valores_pagos.split(',').map(v => parseFloat(v.trim()));
@@ -761,14 +762,15 @@ function exportSalesToXLSX() {
             });
         }
 
-        // --- Processa os produtos da venda ---
+        // Processa os produtos da venda
         // Formato novo (array)
         if (Array.isArray(sale.produtos)) {
             sale.produtos.forEach(product => {
                 const subtotal = product.quantity * product.price;
+                // --- DADOS COM A NOVA ORDEM ---
                 dataForSheet.push([
-                    saleTimestamp, sale.vendedor, product.cod, product.name,
-                    product.quantity, product.price.toFixed(2), subtotal.toFixed(2)
+                    saleTimestamp, sale.vendedor, product.quantity, product.cod, product.name,
+                    product.price.toFixed(2), subtotal.toFixed(2)
                 ]);
             });
         } 
@@ -785,15 +787,15 @@ function exportSalesToXLSX() {
                     name = match[2].trim();
                 }
 
-                // Procura o produto na base de dados pelo nome
                 const foundProduct = allProducts.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
                 
                 const cod = foundProduct ? foundProduct.cod : 'N/A';
                 const price = foundProduct ? foundProduct.price.toFixed(2) : 'N/A';
                 const subtotal = (foundProduct && !isNaN(quantity)) ? (foundProduct.price * parseInt(quantity)).toFixed(2) : 'N/A';
 
+                // --- DADOS COM A NOVA ORDEM ---
                 dataForSheet.push([
-                    saleTimestamp, sale.vendedor, cod, name, quantity, price, subtotal
+                    saleTimestamp, sale.vendedor, quantity, cod, name, price, subtotal
                 ]);
             });
         }
@@ -804,8 +806,8 @@ function exportSalesToXLSX() {
         return;
     }
 
-    // --- Adiciona o resumo de pagamentos ao final da planilha ---
-    dataForSheet.push([]); // Linha em branco para separar
+    // Adiciona o resumo de pagamentos ao final da planilha
+    dataForSheet.push([]); 
     dataForSheet.push(['Resumo de Pagamentos do Dia']);
     dataForSheet.push(['Forma de Pagamento', 'Valor Total']);
     
@@ -1517,6 +1519,7 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
 
