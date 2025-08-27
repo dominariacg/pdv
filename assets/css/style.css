@@ -53,3 +53,13 @@ body {
 .offline { 
     background-color: #ef4444; 
 }
+
+/* ATUALIZAÇÃO: Estilo para a instrução de foco */
+.focus-instruction {
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.scanner-container:hover .focus-instruction {
+    opacity: 1;
+}
