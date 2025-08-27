@@ -597,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         finalizeSaleBtn.disabled = currentCart.length === 0 || !isFullyPaid;
     }
 
-    function finalizeSale() {
+   function finalizeSale() {
     const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     let discount = 0;
     const customDiscountValue = parseFloat(discountCustomAmountInput.value);
@@ -609,10 +609,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (discount > subtotal) discount = subtotal;
     const finalTotal = subtotal - discount;
 
-    // Condição de finalização mais robusta
-    if (currentCart.length === 0 || Math.abs(finalTotal - currentPayments.reduce((sum, p) => sum + p.amount, 0)) > 0.01) {
-        showAlert("A venda não pode ser finalizada. Verifique o carrinho e os pagamentos.");
-        return;
+    const totalPaid = currentPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    // Condição de finalização que permite total R$0.00 sem pagamentos
+    if (currentCart.length === 0 || (finalTotal > 0 && Math.abs(finalTotal - totalPaid) > 0.01)) {
+         showAlert("A venda não pode ser finalizada. Verifique o carrinho e se o valor total foi pago.");
+         return;
     }
 
     const vendasLog = DB.get('vendas_log');
@@ -625,7 +627,6 @@ document.addEventListener('DOMContentLoaded', () => {
             quantity: item.quantity,
             price: item.price
         })),
-        // Lógica aprimorada para salvar detalhes do parcelamento
         formas_pagamento: currentPayments.map(p => {
             if (p.method === 'Cartão de Crédito' && p.installments) {
                 return `${p.method} (${p.installments})`;
@@ -638,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     vendasLog.push(saleData);
     DB.set('vendas_log', vendasLog);
-    logChange('create_sale', saleData);
+    logChange('create_sale', saleData); // Esta chamada agora vai funcionar
     
     let products = DB.get('products');
     currentCart.forEach(cartItem => {
@@ -653,6 +654,23 @@ document.addEventListener('DOMContentLoaded', () => {
     startNewSale();
 }
 
+    function logChange(action, details) {
+    const log = DB.get('change_log');
+    log.push({
+        user: currentUser.username,
+        action: action,
+        timestamp: new Date().toISOString(),
+        details: details
+    });
+    DB.set('change_log', log);
+    localChangesExist = true;
+    updateSessionLogUI();
+    if (syncMessage) {
+        syncMessage.textContent = 'Você tem alterações locais para enviar.';
+    }
+}
+
+    
     function startNewSale() {
         currentCart = [];
         currentPayments = [];
@@ -1533,6 +1551,7 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
 
