@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- CONFIGURAÇÕES FIXAS DE SINCRONIZAÇÃO ---
-    const GITHUB_USER = 'TheDandyHoneybadger';
-    const GITHUB_REPO = 'DomiScan2';
+    // --- CONFIGURAÇÕES FIXAS DE SINCRONIZAÇÃO (ATUALIZADO) ---
+    const GITHUB_USER = 'dominariacg';
+    const GITHUB_REPO = 'pdv';
     const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/git/ref/heads/main`;
     const GITHUB_ACTIONS_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/update_database.yml/dispatches`;
 
@@ -266,7 +266,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // ALTERAÇÃO: Envia apenas o 'change_log', que agora inclui as vendas.
         const changesToUpload = {
             changes: DB.get('change_log')
         };
@@ -653,7 +652,6 @@ document.addEventListener('DOMContentLoaded', () => {
         vendasLog.push(saleData);
         DB.set('vendas_log', vendasLog);
         
-        // ALTERAÇÃO: Registra a venda como uma alteração para ser enviada.
         logChange('create_sale', saleData);
         
         let products = DB.get('products');
@@ -1141,7 +1139,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Funções de alerta e confirmação
     function showAlert(message) {
         alertMessage.textContent = message;
         alertModal.classList.remove('hidden');
@@ -1213,26 +1210,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startScanner(viewportSelector) {
-        Quagga.init({
-            inputStream: { name: "Live", type: "LiveStream", target: document.querySelector(viewportSelector), constraints: { facingMode: "environment" } },
+        // --- MELHORIA DE FOCO: Adicionando constraints mais detalhadas ---
+        const quaggaConfig = {
+            inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: document.querySelector(viewportSelector),
+                constraints: {
+                    width: { min: 640, ideal: 1280 },
+                    height: { min: 480, ideal: 720 },
+                    facingMode: "environment",
+                    focusMode: "continuous"
+                }
+            },
             locator: { patchSize: "medium", halfSample: true },
             numOfWorkers: navigator.hardwareConcurrency || 4,
             decoder: { readers: ["ean_reader", "upc_reader", "code_128_reader"], multiple: false },
             locate: true
-        }, (err) => {
-            if (err) { showAlert('Erro ao iniciar a câmara.'); return; }
+        };
+
+        Quagga.init(quaggaConfig, (err) => {
+            if (err) {
+                console.error("Erro ao iniciar Quagga com constraints avançadas:", err);
+                // Tenta novamente com configurações mais simples em caso de erro
+                quaggaConfig.inputStream.constraints = { facingMode: "environment" };
+                Quagga.init(quaggaConfig, (fallbackErr) => {
+                    if(fallbackErr) {
+                        showAlert('Erro ao iniciar a câmara. Verifique as permissões e se a câmara não está a ser usada por outra aplicação.');
+                        return;
+                    }
+                    Quagga.start();
+                });
+                return;
+            }
+
             Quagga.start();
             isScannerActive = true;
             const container = document.querySelector(viewportSelector).closest('.modal-bg, .scanner-container');
             if (container) {
                 const focusBtn = container.querySelector('.focus-btn');
                 if (focusBtn) focusBtn.classList.remove('hidden');
+
+                // --- MELHORIA DE FOCO: Adicionando "Toque para Focar" ---
+                const viewport = container.querySelector('.scanner-viewport');
+                if (viewport) {
+                    viewport.addEventListener('click', triggerFocus);
+                }
             }
         });
     }
 
     function stopScanner() {
         if (isScannerActive) {
+            // Remove o listener de clique para não ficar acumulando
+            const viewports = document.querySelectorAll('.scanner-viewport');
+            viewports.forEach(vp => vp.removeEventListener('click', triggerFocus));
             Quagga.stop();
             isScannerActive = false;
         }
