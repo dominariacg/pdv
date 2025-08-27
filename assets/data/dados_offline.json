@@ -1,5 +1,5 @@
 {
-    "version": "0.0.0.0.0.8",
+    "version": "0.0.0.0.0.9",
     "products": [
         {
             "barcode": "",
@@ -37325,7 +37325,7 @@
             "prc_total": 54594.0
         },
         {
-            "barcode": "083717861218",
+            "barcode": "0083717861218",
             "category": "Lata",
             "subcategory": "Ygo",
             "subsubcategory": null,
