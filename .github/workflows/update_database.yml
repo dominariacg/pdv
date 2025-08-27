@@ -1,0 +1,41 @@
+name: Update Database from Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      changes:
+        description: 'JSON string of changes to apply'
+        required: true
+        default: '{}'
+
+jobs:
+  update-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run update script
+        env:
+          CHANGES_JSON: ${{ github.event.inputs.changes }}
+        run: python scripts/update_script.py
+
+      - name: Commit and push if there are changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          # Adiciona o arquivo de dados atualizado que está dentro de assets/data
+          git add assets/data/dados_offline.json
+          # Verifica se há mudanças para commitar
+          if git diff --staged --quiet; then
+            echo "Nenhuma alteração para commitar."
+          else
+            git commit -m "Atualiza dados_offline.json via Action"
+            git push
+          fi
