@@ -598,46 +598,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function finalizeSale() {
-        if (currentCart.length === 0 || currentPayments.length === 0) return;
-        const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        let discount = 0;
-        const customDiscountValue = parseFloat(discountCustomAmountInput.value);
-        if (discount5PercentCheckbox.checked) {
-            discount = subtotal * 0.05;
-        } else if (!isNaN(customDiscountValue) && customDiscountValue > 0) {
-            discount = customDiscountValue;
-        }
-        if (discount > subtotal) discount = subtotal;
-        const finalTotal = subtotal - discount;
-        const vendasLog = DB.get('vendas_log');
-        const saleData = {
-            timestamp: new Date().toISOString(),
-            vendedor: currentUser.username,
-            produtos: currentCart.map(item => ({
-                cod: item.cod,
-                name: item.name,
-                quantity: item.quantity,
-                price: item.price
-            })),
-            formas_pagamento: currentPayments.map(p => p.method).join(', '),
-            valores_pagos: currentPayments.map(p => p.amount.toFixed(2)).join(', '),
-            desconto: discount.toFixed(2),
-            valor_total: finalTotal.toFixed(2)
-        };
-        vendasLog.push(saleData);
-        DB.set('vendas_log', vendasLog);
-        logChange('create_sale', saleData);
-        let products = DB.get('products');
-        currentCart.forEach(cartItem => {
-            const productIndex = products.findIndex(p => p.cod === cartItem.cod);
-            if (productIndex !== -1 && products[productIndex].estoque != null) {
-                products[productIndex].estoque -= cartItem.quantity;
-            }
-        });
-        DB.set('products', products);
-        showAlert('Venda finalizada e guardada localmente!');
-        startNewSale();
+    const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    let discount = 0;
+    const customDiscountValue = parseFloat(discountCustomAmountInput.value);
+    if (discount5PercentCheckbox.checked) {
+        discount = subtotal * 0.05;
+    } else if (!isNaN(customDiscountValue) && customDiscountValue > 0) {
+        discount = customDiscountValue;
     }
+    if (discount > subtotal) discount = subtotal;
+    const finalTotal = subtotal - discount;
+
+    // Condição de finalização mais robusta
+    if (currentCart.length === 0 || Math.abs(finalTotal - currentPayments.reduce((sum, p) => sum + p.amount, 0)) > 0.01) {
+        showAlert("A venda não pode ser finalizada. Verifique o carrinho e os pagamentos.");
+        return;
+    }
+
+    const vendasLog = DB.get('vendas_log');
+    const saleData = {
+        timestamp: new Date().toISOString(),
+        vendedor: currentUser.username,
+        produtos: currentCart.map(item => ({
+            cod: item.cod,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+        })),
+        // Lógica aprimorada para salvar detalhes do parcelamento
+        formas_pagamento: currentPayments.map(p => {
+            if (p.method === 'Cartão de Crédito' && p.installments) {
+                return `${p.method} (${p.installments})`;
+            }
+            return p.method;
+        }).join(', '),
+        valores_pagos: currentPayments.map(p => p.amount.toFixed(2)).join(', '),
+        desconto: discount.toFixed(2),
+        valor_total: finalTotal.toFixed(2)
+    };
+    vendasLog.push(saleData);
+    DB.set('vendas_log', vendasLog);
+    logChange('create_sale', saleData);
+    
+    let products = DB.get('products');
+    currentCart.forEach(cartItem => {
+        const productIndex = products.findIndex(p => p.cod === cartItem.cod);
+        if (productIndex !== -1 && products[productIndex].estoque != null) {
+            products[productIndex].estoque -= cartItem.quantity;
+        }
+    });
+    DB.set('products', products);
+    
+    showAlert('Venda finalizada e guardada localmente!');
+    startNewSale();
+}
 
     function startNewSale() {
         currentCart = [];
@@ -1519,6 +1533,7 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
 
