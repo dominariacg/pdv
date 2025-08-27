@@ -5,11 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/git/ref/heads/main`;
     const GITHUB_ACTIONS_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/update_database.yml/dispatches`;
 
+    // --- UTILITÁRIO DE BASE DE DADOS LOCAL ---
     const DB = {
         get: (key) => JSON.parse(localStorage.getItem(key) || '[]'),
         set: (key, data) => localStorage.setItem(key, JSON.stringify(data)),
     };
 
+    // --- VARIÁVEIS DE ESTADO DA APLICAÇÃO ---
     let currentUser = null;
     let currentCart = [];
     let currentProduct = null;
@@ -22,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let productForStockAdjustment = null;
     let localChangesExist = false;
 
-    // --- ELEMENTOS DA UI ---
+    // --- MAPEAMENTO DE ELEMENTOS DA UI (CACHE) ---
     const setupView = document.getElementById('setup-view');
     const loginView = document.getElementById('login-view');
     const appView = document.getElementById('app-view');
@@ -196,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncStatus.textContent = 'Online';
             statusDot.classList.add('online');
             statusDot.classList.remove('offline');
-            syncBtn.disabled = false;
+            syncBtn.disabled = !localChangesExist;
             checkUpdateBtn.disabled = false;
             syncMessage.textContent = 'Pronto para sincronizar.';
             checkForUpdates();
@@ -231,9 +233,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (localChanges.length > 0) {
                 syncMessage.textContent = 'Você tem alterações locais para enviar.';
                 localChangesExist = true;
+                syncBtn.disabled = false;
             } else {
                 syncMessage.textContent = 'A sua base de dados está atualizada.';
                 localChangesExist = false;
+                syncBtn.disabled = true;
                 downloadUpdateBtn.classList.add('hidden');
                 updateNotification.classList.add('hidden');
             }
@@ -256,7 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const changesToUpload = {
             changes: DB.get('change_log')
         };
-        console.log('Enviando para o GitHub:', JSON.stringify(changesToUpload, null, 2));
         syncMessage.textContent = 'A enviar alterações para o GitHub Actions...';
         syncBtn.disabled = true;
         try {
@@ -280,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncMessage.textContent = 'Pedido enviado. A base de dados será atualizada em breve.';
             DB.set('change_log', []);
             localChangesExist = false;
+            syncBtn.disabled = true;
             updateSessionLogUI();
         } catch (error) {
             console.error('Erro no upload:', error);
@@ -593,84 +597,66 @@ document.addEventListener('DOMContentLoaded', () => {
         remainingBalanceSpan.textContent = `R$ ${remaining.toFixed(2)}`;
         remainingBalanceSpan.classList.toggle('text-red-600', remaining > 0.01);
         remainingBalanceSpan.classList.toggle('text-green-600', remaining <= 0.01);
-        const isFullyPaid = Math.abs(remaining) < 0.01;
-        finalizeSaleBtn.disabled = currentCart.length === 0 || !isFullyPaid;
+        
+        // Habilita o botão se o carrinho não estiver vazio E o valor restante for praticamente zero.
+        finalizeSaleBtn.disabled = !(currentCart.length > 0 && Math.abs(remaining) < 0.01);
     }
 
-   function finalizeSale() {
-    const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    let discount = 0;
-    const customDiscountValue = parseFloat(discountCustomAmountInput.value);
-    if (discount5PercentCheckbox.checked) {
-        discount = subtotal * 0.05;
-    } else if (!isNaN(customDiscountValue) && customDiscountValue > 0) {
-        discount = customDiscountValue;
-    }
-    if (discount > subtotal) discount = subtotal;
-    const finalTotal = subtotal - discount;
-
-    const totalPaid = currentPayments.reduce((sum, p) => sum + p.amount, 0);
-
-    // Condição de finalização que permite total R$0.00 sem pagamentos
-    if (currentCart.length === 0 || (finalTotal > 0 && Math.abs(finalTotal - totalPaid) > 0.01)) {
-         showAlert("A venda não pode ser finalizada. Verifique o carrinho e se o valor total foi pago.");
-         return;
-    }
-
-    const vendasLog = DB.get('vendas_log');
-    const saleData = {
-        timestamp: new Date().toISOString(),
-        vendedor: currentUser.username,
-        produtos: currentCart.map(item => ({
-            cod: item.cod,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price
-        })),
-        formas_pagamento: currentPayments.map(p => {
-            if (p.method === 'Cartão de Crédito' && p.installments) {
-                return `${p.method} (${p.installments})`;
-            }
-            return p.method;
-        }).join(', '),
-        valores_pagos: currentPayments.map(p => p.amount.toFixed(2)).join(', '),
-        desconto: discount.toFixed(2),
-        valor_total: finalTotal.toFixed(2)
-    };
-    vendasLog.push(saleData);
-    DB.set('vendas_log', vendasLog);
-    logChange('create_sale', saleData); // Esta chamada agora vai funcionar
-    
-    let products = DB.get('products');
-    currentCart.forEach(cartItem => {
-        const productIndex = products.findIndex(p => p.cod === cartItem.cod);
-        if (productIndex !== -1 && products[productIndex].estoque != null) {
-            products[productIndex].estoque -= cartItem.quantity;
+    function finalizeSale() {
+        const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        let discount = 0;
+        const customDiscountValue = parseFloat(discountCustomAmountInput.value);
+        if (discount5PercentCheckbox.checked) {
+            discount = subtotal * 0.05;
+        } else if (!isNaN(customDiscountValue) && customDiscountValue > 0) {
+            discount = customDiscountValue;
         }
-    });
-    DB.set('products', products);
+        if (discount > subtotal) discount = subtotal;
+        const finalTotal = subtotal - discount;
+        const totalPaid = currentPayments.reduce((sum, p) => sum + p.amount, 0);
     
-    showAlert('Venda finalizada e guardada localmente!');
-    startNewSale();
-}
-
-    function logChange(action, details) {
-    const log = DB.get('change_log');
-    log.push({
-        user: currentUser.username,
-        action: action,
-        timestamp: new Date().toISOString(),
-        details: details
-    });
-    DB.set('change_log', log);
-    localChangesExist = true;
-    updateSessionLogUI();
-    if (syncMessage) {
-        syncMessage.textContent = 'Você tem alterações locais para enviar.';
+        if (currentCart.length === 0 || (finalTotal > 0 && Math.abs(finalTotal - totalPaid) > 0.01)) {
+             showAlert("A venda não pode ser finalizada. Verifique o carrinho e se o valor total foi pago.");
+             return;
+        }
+    
+        const vendasLog = DB.get('vendas_log');
+        const saleData = {
+            timestamp: new Date().toISOString(),
+            vendedor: currentUser.username,
+            produtos: currentCart.map(item => ({
+                cod: item.cod,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price
+            })),
+            formas_pagamento: currentPayments.map(p => {
+                if (p.method === 'Cartão de Crédito' && p.installments) {
+                    return `${p.method} (${p.installments})`;
+                }
+                return p.method;
+            }).join(', '),
+            valores_pagos: currentPayments.map(p => p.amount.toFixed(2)).join(', '),
+            desconto: discount.toFixed(2),
+            valor_total: finalTotal.toFixed(2)
+        };
+        vendasLog.push(saleData);
+        DB.set('vendas_log', vendasLog);
+        logChange('create_sale', saleData);
+        
+        let products = DB.get('products');
+        currentCart.forEach(cartItem => {
+            const productIndex = products.findIndex(p => p.cod === cartItem.cod);
+            if (productIndex !== -1 && products[productIndex].estoque != null) {
+                products[productIndex].estoque -= cartItem.quantity;
+            }
+        });
+        DB.set('products', products);
+        
+        showAlert('Venda finalizada e guardada localmente!');
+        startNewSale();
     }
-}
 
-    
     function startNewSale() {
         currentCart = [];
         currentPayments = [];
@@ -719,7 +705,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const saleTimestamp = new Date(sale.timestamp);
                 const discountHtml = sale.desconto > 0 ? `<div class="text-xs text-green-600 mt-1">Desconto: - R$ ${parseFloat(sale.desconto).toFixed(2)}</div>` : '';
                 
-                // Trata tanto o formato antigo (string) quanto o novo (array)
                 const productsHtml = Array.isArray(sale.produtos) 
                     ? sale.produtos.map(p => `<p>${p.quantity}x ${p.name}</p>`).join('')
                     : `<p>${sale.produtos}</p>`;
@@ -761,97 +746,118 @@ document.addEventListener('DOMContentLoaded', () => {
         showHistory();
     }
 
-function exportSalesToXLSX() {
-    const today = new Date().toISOString().slice(0, 10);
-    const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
-    const allProducts = DB.get('products'); // Carrega todos os produtos para consulta
-
-    if (sales.length === 0) {
-        showAlert("Nenhuma venda registada hoje para exportar.");
-        return;
-    }
-
-    // --- CABEÇALHO COM A NOVA ORDEM DE COLUNAS ---
-    const dataForSheet = [
-        ['Data/Hora', 'Vendedor', 'Qtd', 'COD Produto', 'Descrição do Item', 'Preço Unit.', 'Subtotal Item']
-    ];
+    function exportSalesToXLSX() {
+        const today = new Date().toISOString().slice(0, 10);
+        const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
+        const allProducts = DB.get('products'); 
     
-    const paymentSummary = {}; // Objeto para somar os pagamentos
-
-    sales.forEach(sale => {
-        const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
-
-        // Processa e soma os pagamentos de cada venda
-        if (sale.formas_pagamento && sale.valores_pagos) {
-            const methods = sale.formas_pagamento.split(',').map(m => m.trim());
-            const values = sale.valores_pagos.split(',').map(v => parseFloat(v.trim()));
-
-            methods.forEach((method, index) => {
-                const value = values[index];
-                if (!isNaN(value)) {
-                    paymentSummary[method] = (paymentSummary[method] || 0) + value;
-                }
-            });
+        if (sales.length === 0) {
+            showAlert("Nenhuma venda registada hoje para exportar.");
+            return;
         }
-
-        // Processa os produtos da venda
-        // Formato novo (array)
-        if (Array.isArray(sale.produtos)) {
-            sale.produtos.forEach(product => {
-                const subtotal = product.quantity * product.price;
-                // --- DADOS COM A NOVA ORDEM ---
-                dataForSheet.push([
-                    saleTimestamp, sale.vendedor, product.quantity, product.cod, product.name,
-                    product.price.toFixed(2), subtotal.toFixed(2)
-                ]);
-            });
-        } 
-        // Formato antigo (string)
-        else if (typeof sale.produtos === 'string' && sale.produtos.length > 0) {
-            const productItems = sale.produtos.split(',').map(item => item.trim());
-
-            productItems.forEach(item => {
-                let quantity = '1';
-                let name = item;
-                const match = item.match(/^(\d+)\s*x\s*(.*)/);
-                if (match) {
-                    quantity = match[1];
-                    name = match[2].trim();
-                }
-
-                const foundProduct = allProducts.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
-                
-                const cod = foundProduct ? foundProduct.cod : 'N/A';
-                const price = foundProduct ? foundProduct.price.toFixed(2) : 'N/A';
-                const subtotal = (foundProduct && !isNaN(quantity)) ? (foundProduct.price * parseInt(quantity)).toFixed(2) : 'N/A';
-
-                // --- DADOS COM A NOVA ORDEM ---
-                dataForSheet.push([
-                    saleTimestamp, sale.vendedor, quantity, cod, name, price, subtotal
-                ]);
-            });
-        }
-    });
-
-    if (dataForSheet.length <= 1) {
-        showAlert("Não foram encontrados dados de produtos válidos nas vendas de hoje para exportar.");
-        return;
-    }
-
-    // Adiciona o resumo de pagamentos ao final da planilha
-    dataForSheet.push([]); 
-    dataForSheet.push(['Resumo de Pagamentos do Dia']);
-    dataForSheet.push(['Forma de Pagamento', 'Valor Total']);
     
-    for (const method in paymentSummary) {
-        dataForSheet.push([method, paymentSummary[method].toFixed(2)]);
+        const dataForSheet = [
+            ['Data/Hora', 'Vendedor', 'Qtd', 'COD Produto', 'Descrição do Item', 'Preço Unit.', 'Subtotal Item']
+        ];
+        
+        const paymentSummary = {}; 
+    
+        sales.forEach(sale => {
+            const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
+    
+            if (sale.formas_pagamento && sale.valores_pagos) {
+                const methods = sale.formas_pagamento.split(',').map(m => m.trim());
+                const values = sale.valores_pagos.split(',').map(v => parseFloat(v.trim()));
+    
+                methods.forEach((method, index) => {
+                    const value = values[index];
+                    if (!isNaN(value)) {
+                        paymentSummary[method] = (paymentSummary[method] || 0) + value;
+                    }
+                });
+            }
+    
+            if (Array.isArray(sale.produtos)) {
+                sale.produtos.forEach(product => {
+                    const subtotal = product.quantity * product.price;
+                    dataForSheet.push([
+                        saleTimestamp, sale.vendedor, product.quantity, product.cod, product.name,
+                        product.price.toFixed(2), subtotal.toFixed(2)
+                    ]);
+                });
+            } 
+            else if (typeof sale.produtos === 'string' && sale.produtos.length > 0) {
+                const productItems = sale.produtos.split(',').map(item => item.trim());
+    
+                productItems.forEach(item => {
+                    let quantity = '1';
+                    let name = item;
+                    const match = item.match(/^(\d+)\s*x\s*(.*)/);
+                    if (match) {
+                        quantity = match[1];
+                        name = match[2].trim();
+                    }
+    
+                    const foundProduct = allProducts.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
+                    
+                    const cod = foundProduct ? foundProduct.cod : 'N/A';
+                    const price = foundProduct ? foundProduct.price.toFixed(2) : 'N/A';
+                    const subtotal = (foundProduct && !isNaN(quantity)) ? (foundProduct.price * parseInt(quantity)).toFixed(2) : 'N/A';
+    
+                    dataForSheet.push([
+                        saleTimestamp, sale.vendedor, quantity, cod, name, price, subtotal
+                    ]);
+                });
+            }
+        });
+    
+        if (dataForSheet.length <= 1) {
+            showAlert("Não foram encontrados dados de produtos válidos nas vendas de hoje para exportar.");
+            return;
+        }
+    
+        dataForSheet.push([]); 
+        dataForSheet.push(['Resumo de Pagamentos do Dia']);
+        dataForSheet.push(['Forma de Pagamento', 'Valor Total']);
+        
+        for (const method in paymentSummary) {
+            dataForSheet.push([method, paymentSummary[method].toFixed(2)]);
+        }
+    
+        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas do Dia");
+        XLSX.writeFile(workbook, `relatorio_vendas_completo_${today}.xlsx`);
     }
 
-    const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas do Dia");
-    XLSX.writeFile(workbook, `relatorio_vendas_completo_${today}.xlsx`);
-}
+    function logChange(action, details) {
+        const log = DB.get('change_log');
+        log.push({
+            user: currentUser.username,
+            action: action,
+            timestamp: new Date().toISOString(),
+            details: details
+        });
+        DB.set('change_log', log);
+        localChangesExist = true;
+        updateSessionLogUI();
+        if (syncMessage) {
+            syncMessage.textContent = 'Você tem alterações locais para enviar.';
+        }
+    }
+
+    function updateSessionLogUI() {
+        const log = DB.get('change_log');
+        if (log.length > 0) {
+            sessionLogContent.innerHTML = log.map(entry => {
+                const date = new Date(entry.timestamp).toLocaleString('pt-BR');
+                const detailsString = typeof entry.details === 'object' ? JSON.stringify(entry.details) : String(entry.details);
+                return `<p><strong>[${date}]</strong> ${entry.action}: ${detailsString.substring(0, 100)}...</p>`;
+            }).join('');
+        } else {
+            sessionLogContent.innerHTML = '<p>Nenhuma alteração pendente.</p>';
+        }
+    }
 
     function addNewProduct(event) {
         event.preventDefault();
@@ -1334,7 +1340,9 @@ function exportSalesToXLSX() {
             Quagga.stop();
             isScannerActive = false;
         }
-        [scannerModal, addProductScannerContainer, pairProductScannerContainer, adjustStockScannerContainer, editBarcodeScannerContainer].forEach(el => el.classList.add('hidden'));
+        [scannerModal, addProductScannerContainer, pairProductScannerContainer, adjustStockScannerContainer, editBarcodeScannerContainer].forEach(el => {
+            if (el) el.classList.add('hidden');
+        });
         focusButtons.forEach(btn => btn.classList.add('hidden'));
     }
 
@@ -1549,15 +1557,7 @@ function exportSalesToXLSX() {
     });
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    
+    // --- INICIA A APLICAÇÃO ---
     initializeApp();
 });
-
-
-
-
-
-
-
-
-
-
