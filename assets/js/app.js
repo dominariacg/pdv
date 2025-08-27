@@ -729,41 +729,47 @@ document.addEventListener('DOMContentLoaded', () => {
         showHistory();
     }
 
-    function exportSalesToXLSX() {
-        const today = new Date().toISOString().slice(0, 10);
-        const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
-        if (sales.length === 0) {
-            showAlert("Nenhuma venda registada hoje para exportar.");
-            return;
-        }
-        const aggregatedProducts = {};
-        sales.forEach(sale => {
-            if (Array.isArray(sale.produtos)) {
-                sale.produtos.forEach(product => {
-                    if (aggregatedProducts[product.cod]) {
-                        aggregatedProducts[product.cod].quantity += product.quantity;
-                    } else {
-                        aggregatedProducts[product.cod] = {
-                            cod: product.cod,
-                            name: product.name,
-                            quantity: product.quantity
-                        };
-                    }
-                });
-            }
-        });
-        const dataForSheet = [
-            ['COD', 'Quantidade', 'Produto']
-        ];
-        for (const cod in aggregatedProducts) {
-            const product = aggregatedProducts[cod];
-            dataForSheet.push([product.cod, product.quantity, product.name]);
-        }
-        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas do Dia");
-        XLSX.writeFile(workbook, `relatorio_vendas_${today}.xlsx`);
+function exportSalesToXLSX() {
+    const today = new Date().toISOString().slice(0, 10);
+    const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
+
+    if (sales.length === 0) {
+        showAlert("Nenhuma venda registada hoje para exportar.");
+        return;
     }
+
+    const dataForSheet = [
+        ['Data/Hora', 'Vendedor', 'COD do Produto', 'Nome do Produto', 'Quantidade', 'Preço Unitário', 'Subtotal']
+    ];
+
+    sales.forEach(sale => {
+        if (Array.isArray(sale.produtos)) {
+            const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
+            sale.produtos.forEach(product => {
+                const subtotal = product.quantity * product.price;
+                dataForSheet.push([
+                    saleTimestamp,
+                    sale.vendedor,
+                    product.cod,
+                    product.name,
+                    product.quantity,
+                    product.price.toFixed(2),
+                    subtotal.toFixed(2)
+                ]);
+            });
+        }
+    });
+
+    if (dataForSheet.length <= 1) {
+        showAlert("Não foram encontrados produtos nas vendas de hoje para exportar.");
+        return;
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas Detalhadas do Dia");
+    XLSX.writeFile(workbook, `relatorio_vendas_detalhado_${today}.xlsx`);
+}
 
     function logChange(action, details) {
         const log = DB.get('change_log');
@@ -1491,3 +1497,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
