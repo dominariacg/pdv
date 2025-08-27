@@ -732,6 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function exportSalesToXLSX() {
     const today = new Date().toISOString().slice(0, 10);
     const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
+    const allProducts = DB.get('products'); // Carrega todos os produtos para consulta
 
     if (sales.length === 0) {
         showAlert("Nenhuma venda registada hoje para exportar.");
@@ -739,56 +740,60 @@ function exportSalesToXLSX() {
     }
 
     const dataForSheet = [
-        ['Data/Hora', 'Vendedor', 'COD Produto', 'Descrição do Item', 'Qtd', 'Preço Unit.', 'Subtotal Item', 'Total da Venda']
+        ['Data/Hora', 'Vendedor', 'COD Produto', 'Descrição do Item', 'Qtd', 'Preço Unit.', 'Subtotal Item']
     ];
+    
+    const paymentSummary = {}; // Objeto para somar os pagamentos
 
     sales.forEach(sale => {
         const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
-        const saleTotal = parseFloat(sale.valor_total).toFixed(2);
 
-        // Processa o formato novo (array de produtos)
+        // --- Processa e soma os pagamentos de cada venda ---
+        if (sale.formas_pagamento && sale.valores_pagos) {
+            const methods = sale.formas_pagamento.split(',').map(m => m.trim());
+            const values = sale.valores_pagos.split(',').map(v => parseFloat(v.trim()));
+
+            methods.forEach((method, index) => {
+                const value = values[index];
+                if (!isNaN(value)) {
+                    paymentSummary[method] = (paymentSummary[method] || 0) + value;
+                }
+            });
+        }
+
+        // --- Processa os produtos da venda ---
+        // Formato novo (array)
         if (Array.isArray(sale.produtos)) {
             sale.produtos.forEach(product => {
                 const subtotal = product.quantity * product.price;
                 dataForSheet.push([
-                    saleTimestamp,
-                    sale.vendedor,
-                    product.cod,
-                    product.name,
-                    product.quantity,
-                    product.price.toFixed(2),
-                    subtotal.toFixed(2),
-                    saleTotal
+                    saleTimestamp, sale.vendedor, product.cod, product.name,
+                    product.quantity, product.price.toFixed(2), subtotal.toFixed(2)
                 ]);
             });
         } 
-        // Processa o formato antigo (texto com vários produtos)
+        // Formato antigo (string)
         else if (typeof sale.produtos === 'string' && sale.produtos.length > 0) {
-            // Divide a string por vírgula para obter cada item individualmente
             const productItems = sale.produtos.split(',').map(item => item.trim());
 
             productItems.forEach(item => {
-                let quantity = '1'; // Quantidade padrão é 1
+                let quantity = '1';
                 let name = item;
-
-                // Tenta encontrar o padrão "4x Nome do Produto"
                 const match = item.match(/^(\d+)\s*x\s*(.*)/);
-                
                 if (match) {
-                    quantity = match[1]; // O número (quantidade)
-                    name = match[2].trim(); // O texto após o "x " (nome do produto)
+                    quantity = match[1];
+                    name = match[2].trim();
                 }
 
-                // Adiciona uma linha para cada produto encontrado
+                // Procura o produto na base de dados pelo nome
+                const foundProduct = allProducts.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
+                
+                const cod = foundProduct ? foundProduct.cod : 'N/A';
+                const price = foundProduct ? foundProduct.price.toFixed(2) : 'N/A';
+                const subtotal = (foundProduct && !isNaN(quantity)) ? (foundProduct.price * parseInt(quantity)).toFixed(2) : 'N/A';
+
                 dataForSheet.push([
-                    saleTimestamp,
-                    sale.vendedor,
-                    'N/A', // COD não disponível no formato antigo
-                    name,
-                    quantity,
-                    'N/A', // Preço não disponível no formato antigo
-                    'N/A', // Subtotal não disponível no formato antigo
-                    saleTotal
+                    saleTimestamp, sale.vendedor, cod, name, quantity, price, subtotal
                 ]);
             });
         }
@@ -799,10 +804,19 @@ function exportSalesToXLSX() {
         return;
     }
 
+    // --- Adiciona o resumo de pagamentos ao final da planilha ---
+    dataForSheet.push([]); // Linha em branco para separar
+    dataForSheet.push(['Resumo de Pagamentos do Dia']);
+    dataForSheet.push(['Forma de Pagamento', 'Valor Total']);
+    
+    for (const method in paymentSummary) {
+        dataForSheet.push([method, paymentSummary[method].toFixed(2)]);
+    }
+
     const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas Detalhadas do Dia");
-    XLSX.writeFile(workbook, `relatorio_vendas_detalhado_${today}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas do Dia");
+    XLSX.writeFile(workbook, `relatorio_vendas_completo_${today}.xlsx`);
 }
 
     function addNewProduct(event) {
@@ -1503,6 +1517,7 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
 
