@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Pedidos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@ericblade/quagga2@1.6.0/dist/quagga.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Caminho para o CSS atualizado -->
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- TELA DE CONFIGURAÇÃO INICIAL (CARREGAR FICHEIRO) -->
+    <div id="setup-view" class="w-full max-w-md p-8 space-y-4 bg-white rounded-xl shadow-lg text-center hidden">
+        <h2 class="text-3xl font-bold text-gray-800">Configuração Inicial</h2>
+        <p class="text-gray-600">Para usar a aplicação, por favor, carregue o ficheiro <code>dados_offline.json</code>.</p>
+        <div class="mt-4">
+            <input type="file" id="import-db-input" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+        </div>
+        <button id="load-db-btn" class="w-full py-3 mt-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400" disabled>Carregar e Iniciar</button>
+        <p id="setup-error" class="text-sm text-center text-red-500 min-h-[20px]"></p>
+    </div>
+
+    <!-- TELA DE LOGIN -->
+    <div id="login-view" class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg hidden">
+        <h2 class="text-3xl font-bold text-center text-gray-800">Aceder ao Sistema</h2>
+        <div>
+            <label for="username" class="block text-sm font-medium text-gray-700">Utilizador</label>
+            <input type="text" id="username" class="mt-1 block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+            <label for="password" class="block text-sm font-medium text-gray-700">Senha</label>
+            <input type="password" id="password" class="mt-1 block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="flex items-center">
+            <input id="keep-logged-in" name="keep-logged-in" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+            <label for="keep-logged-in" class="ml-2 block text-sm text-gray-900">Permanecer ligado</label>
+        </div>
+        <button id="login-btn" class="w-full py-3 mt-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-all">
+            Entrar
+        </button>
+        <p id="login-error" class="text-sm text-center text-red-500"></p>
+    </div>
+
+    <!-- TELA PRINCIPAL DA APLICAÇÃO -->
+    <div id="app-view" class="w-full max-w-md bg-gray-50 hidden flex flex-col h-screen">
+        <div id="update-notification" class="hidden bg-yellow-400 text-yellow-900 text-center p-2 text-sm">
+            Uma nova versão da base de dados está disponível! Vá a Configurações para atualizar.
+        </div>
+        <nav class="bg-white shadow-md">
+            <div class="flex justify-around border-b">
+                <button data-tab="vender-view" class="tab-btn flex-1 py-4 px-2 text-center text-sm font-medium border-b-2 border-transparent hover:text-blue-500 transition-all">Vender</button>
+                <button data-tab="historico-view" class="tab-btn flex-1 py-4 px-2 text-center text-sm font-medium border-b-2 border-transparent hover:text-blue-500 transition-all">Histórico</button>
+                <button data-tab="admin-view" id="admin-tab-btn" class="tab-btn flex-1 py-4 px-2 text-center text-sm font-medium border-b-2 border-transparent hover:text-blue-500 transition-all hidden">Admin</button>
+                <button data-tab="config-view" class="tab-btn flex-1 py-4 px-2 text-center text-sm font-medium border-b-2 border-transparent hover:text-blue-500 transition-all">Configurações</button>
+            </div>
+        </nav>
+
+        <main class="flex-grow overflow-y-auto">
+            <div id="vender-view" class="tab-content p-4">
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <div class="space-y-2">
+                        <div class="relative">
+                            <label for="code-input" class="block text-sm font-medium text-gray-700">Código do Produto</label>
+                            <input type="text" id="code-input" placeholder="Digite ou escaneie o código" class="mt-1 block w-full px-4 py-2 text-lg bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12">
+                            <button id="scan-code-btn" class="absolute right-1 top-8 bg-gray-200 hover:bg-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 10h18M3 14h18M3 18h18" /></svg>
+                            </button>
+                        </div>
+                        <div id="product-info" class="p-3 bg-blue-50 rounded-lg min-h-[60px] hidden">
+                            <div id="product-found-controls" class="hidden">
+                                <p class="font-semibold text-blue-800 text-sm" id="product-name"></p>
+                                <p class="text-xl font-bold text-blue-900" id="product-price"></p>
+                                <div class="flex items-center justify-between mt-2">
+                                    <div class="flex items-center gap-2">
+                                        <button id="decrease-qty-btn" class="w-8 h-8 bg-gray-200 rounded-full font-bold text-lg">-</button>
+                                        <span id="product-quantity" class="text-lg font-bold">1</span>
+                                        <button id="increase-qty-btn" class="w-8 h-8 bg-gray-200 rounded-full font-bold text-lg">+</button>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button id="cancel-add-btn" class="w-10 h-10 bg-red-500 text-white rounded-lg flex items-center justify-center font-bold text-xl">X</button>
+                                        <button id="add-to-cart-btn" class="h-10 px-4 font-semibold text-white bg-green-600 rounded-lg">Adicionar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="product-not-found-controls" class="hidden">
+                                <p id="product-not-found-message" class="font-semibold text-red-800 text-sm">Produto não encontrado.</p>
+                                <button id="register-new-product-link" class="w-full mt-2 py-2 font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 hidden">Registar Novo Produto</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md flex flex-col mt-4">
+                    <h3 class="text-lg font-semibold mb-2 text-gray-700">Carrinho</h3>
+                    <div id="cart-items" class="flex-grow space-y-2 overflow-y-auto max-h-[20vh] border-t border-b py-2">
+                        <p class="text-gray-500 text-center">Carrinho vazio</p>
+                    </div>
+                    <div class="mt-2 pt-2 border-t">
+                        <div class="space-y-3">
+                            <h4 class="text-md font-semibold text-gray-700">Desconto</h4>
+                            <div class="flex items-center gap-4">
+                                <div class="flex items-center">
+                                    <input id="discount-5-percent" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                                    <label for="discount-5-percent" class="ml-2 text-sm text-gray-700">5%</label>
+                                </div>
+                                <div>
+                                    <label for="discount-custom-amount" class="sr-only">Outro valor de desconto</label>
+                                    <input type="number" id="discount-custom-amount" placeholder="Outro valor" class="w-28 px-2 py-1 text-sm bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+
+                            <h4 class="text-md font-semibold text-gray-700 pt-2 border-t mt-4">Pagamento</h4>
+                            <div id="payment-entries" class="space-y-2"></div>
+                            <div class="flex items-end gap-2">
+                                <div class="flex-1">
+                                    <label for="payment-method-select" class="block text-xs font-medium text-gray-600">Forma de Pagamento</label>
+                                    <select id="payment-method-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                        <option>Dinheiro</option><option>Pix</option><option>Cartão de Crédito</option><option>Cartão de Débito</option><option>Créditos</option>
+                                    </select>
+                                </div>
+                                <div id="installments-container" class="flex-1 hidden">
+                                    <label for="installments-select" class="block text-xs font-medium text-gray-600">Parcelas</label>
+                                    <select id="installments-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                        <option value="À Vista">À Vista</option><option value="2x">2x</option><option value="3x">3x</option><option value="4x">4x</option><option value="5x">5x</option><option value="6x">6x</option><option value="7x">7x</option><option value="8x">8x</option><option value="9x">9x</option><option value="10x">10x</option>
+                                    </select>
+                                </div>
+                            </div>
+                             <div class="flex items-end gap-2 mt-2">
+                                <div class="flex-1">
+                                    <label for="payment-amount-input" class="block text-xs font-medium text-gray-600">Valor Pago</label>
+                                    <input type="number" id="payment-amount-input" placeholder="0.00" class="mt-1 block w-full px-3 py-2 text-base bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <button id="add-payment-btn" class="h-10 px-4 font-semibold text-white bg-cyan-600 rounded-lg hover:bg-cyan-700">Add</button>
+                            </div>
+                        </div>
+                        <div class="mt-4 space-y-1 text-sm">
+                            <div class="flex justify-between"><span>Subtotal:</span><span id="cart-subtotal">R$ 0,00</span></div>
+                            <div id="discount-info" class="hidden text-green-600 flex justify-between"><span>Desconto:</span><span id="discount-amount">- R$ 0,00</span></div>
+                            <div class="flex justify-between font-semibold"><span>Total Pago:</span><span id="total-paid">R$ 0,00</span></div>
+                            <div class="flex justify-between font-semibold" id="remaining-balance-container"><span>Restante:</span><span id="remaining-balance" class="text-red-600">R$ 0,00</span></div>
+                        </div>
+                        <div class="flex justify-between items-center text-xl font-bold mt-2 pt-2 border-t"><span class="text-gray-800">TOTAL:</span><span id="cart-total" class="text-green-700">R$ 0,00</span></div>
+                        <div class="flex flex-col gap-2 mt-4">
+                             <button id="finalize-sale-btn" class="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-all" disabled>Finalizar Venda</button>
+                             <button id="clear-cart-btn" class="w-full py-2 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all">Limpar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="historico-view" class="tab-content p-4 hidden">
+                <div class="bg-white w-full rounded-xl shadow-md p-6 flex flex-col">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-xl font-bold text-gray-800">Histórico de Vendas</h2>
+                        <span id="history-total" class="text-lg font-bold text-gray-800">R$ 0,00</span>
+                    </div>
+                    <div class="mb-4">
+                        <label for="history-date" class="block text-sm font-medium text-gray-700">Filtrar por data:</label>
+                        <input type="date" id="history-date" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <div id="history-user-filter-container" class="mb-4 hidden">
+                        <label for="history-user-filter" class="block text-sm font-medium text-gray-700">Filtrar por funcionário:</label>
+                        <select id="history-user-filter" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                    </div>
+                    <div id="history-content" class="overflow-y-auto space-y-3"></div>
+                </div>
+            </div>
+            <div id="admin-view" class="tab-content p-4 hidden">
+                <div class="bg-white w-full rounded-xl shadow-md p-6 flex flex-col gap-4">
+                    <h2 class="text-xl font-bold text-gray-800 text-center">Painel do Administrador</h2>
+                    
+                    <h3 class="text-lg font-semibold text-gray-700 mt-2 border-b pb-2">Gestão</h3>
+                    <button id="add-product-btn" class="w-full py-3 font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-all">Registar Novo Produto</button>
+                    <button id="pair-product-btn" class="w-full py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-all">Casar Produto</button>
+                    <button id="edit-barcode-btn" class="w-full py-3 font-semibold text-white bg-blue-800 rounded-lg hover:bg-blue-900 transition-all">Editar Código de Barras</button>
+                    <button id="adjust-stock-btn" class="w-full py-3 font-semibold text-white bg-orange-600 rounded-lg hover:bg-orange-700 transition-all">Ajustar Estoque</button>
+                    <button id="add-user-btn" class="w-full py-3 font-semibold text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 transition-all">Registar Novo Funcionário</button>
+
+                    <h3 class="text-lg font-semibold text-gray-700 mt-4 border-b pb-2">Relatórios</h3>
+                    <button id="export-reports-btn" class="w-full py-3 font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-all">Exportar Relatórios (CSV)</button>
+
+                    <h3 class="text-lg font-semibold text-gray-700 mt-4 border-b pb-2">Dados</h3>
+                    <button id="import-export-data-btn" class="w-full py-3 font-semibold text-white bg-gray-600 rounded-lg hover:bg-gray-700 transition-all">Importar/Exportar Backup</button>
+                </div>
+            </div>
+            <div id="config-view" class="tab-content p-4 hidden">
+                 <div class="bg-white w-full rounded-xl shadow-md p-6 space-y-6">
+                    <h2 class="text-xl font-bold text-gray-800 text-center">Configurações</h2>
+                    
+                    <div class="text-center space-y-1">
+                        <p>Utilizador logado: <span id="current-user-info" class="font-semibold"></span></p>
+                        <p class="text-sm text-gray-500">Versão da Base de Dados: <span id="db-version-info" class="font-semibold"></span></p>
+                    </div>
+
+                    <div id="sync-section" class="p-4 bg-gray-100 rounded-lg space-y-4">
+                        <h3 class="font-semibold text-lg text-gray-700 text-center">Sincronização com GitHub</h3>
+                        
+                        <div class="hidden">
+                            <label for="github-user" class="block text-sm font-medium text-gray-700">Utilizador do GitHub</label>
+                            <input type="text" id="github-user" class="mt-1 block w-full px-3 py-2 text-sm bg-gray-200 border border-gray-300 rounded-lg" disabled>
+                        </div>
+                        <div class="hidden">
+                            <label for="github-repo" class="block text-sm font-medium text-gray-700">Repositório</label>
+                            <input type="text" id="github-repo" class="mt-1 block w-full px-3 py-2 text-sm bg-gray-200 border border-gray-300 rounded-lg" disabled>
+                        </div>
+                        <div>
+                            <label for="github-pat" class="block text-sm font-medium text-gray-700">Senha de Upload</label>
+                            <input type="password" id="github-pat" class="mt-1 block w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">A sua senha (token) é usada para autorizar o upload e não é guardada.</p>
+                        </div>
+
+                        <div class="flex items-center justify-center pt-4 border-t">
+                            <span id="status-dot" class="status-dot"></span>
+                            <span id="sync-status" class="text-sm font-medium text-gray-600">Verificando...</span>
+                        </div>
+                        <p id="sync-message" class="text-xs text-center text-gray-500 min-h-[32px]"></p>
+                        <button id="check-update-btn" class="w-full py-2 font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-all">Procurar por Atualizações</button>
+                        <button id="download-update-btn" class="hidden w-full py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all mt-2">Baixar Nova Versão</button>
+                        <button id="sync-btn" class="w-full py-2 font-semibold text-white bg-gray-600 rounded-lg hover:bg-gray-700 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed mt-2" disabled>
+                            Enviar Alterações
+                        </button>
+                    </div>
+
+                    <div id="session-log-section" class="p-4 bg-gray-100 rounded-lg space-y-2">
+                        <h3 class="font-semibold text-lg text-gray-700 text-center">Log de Alterações Pendentes</h3>
+                        <div id="session-log-content" class="text-xs text-gray-600 bg-white p-2 rounded max-h-24 overflow-y-auto">
+                            <p>Nenhuma alteração pendente.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center">
+                        <button id="logout-btn-config" class="px-6 py-3 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-all">Sair da Conta</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAIS -->
+    <div id="alert-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 modal-bg"><div class="bg-white w-full max-w-sm rounded-xl shadow-2xl p-6 text-center"><p id="alert-message" class="text-lg text-gray-700 mb-4"></p><button id="close-alert-btn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">OK</button></div></div>
+    <div id="confirm-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 modal-bg"><div class="bg-white w-full max-w-sm rounded-xl shadow-2xl p-6 text-center"><p id="confirm-message" class="text-lg text-gray-700 mb-6"></p><div class="flex justify-center gap-4"><button id="confirm-no-btn" class="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">Não</button><button id="confirm-yes-btn" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Sim</button></div></div></div>
+    <div id="scanner-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Aponte para o Código</h2><button id="close-scanner-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <p class="scanner-error-message text-red-500 text-sm text-center -mt-2 mb-2 hidden"></p>
+            <div id="scanner-container" class="relative scanner-container"><div id="scanner-viewport" class="scanner-viewport"></div></div>
+            <div class="mt-4 flex justify-center"><button class="focus-btn hidden px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Focar</button></div>
+        </div>
+    </div>
+    <div id="add-product-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full overflow-y-auto max-h-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Registar Novo Produto</h2><button id="close-add-product-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <div id="add-product-scanner-container" class="relative hidden mb-4 bg-gray-200 rounded-lg scanner-container">
+                <p class="scanner-error-message text-red-500 text-sm text-center pt-2 hidden"></p>
+                <div id="add-product-scanner-viewport" class="scanner-viewport"></div>
+                <div class="mt-2 flex justify-center"><button class="focus-btn hidden px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Focar</button></div>
+            </div>
+            <form id="add-product-form" class="space-y-3">
+                <div>
+                    <label for="new-cod" class="block text-sm font-medium text-gray-700">Código (Chave Primária)</label>
+                    <div class="relative mt-1">
+                        <input type="text" id="new-cod" required class="block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12">
+                        <button type="button" id="scan-new-code-btn" class="absolute right-1 top-1/2 -translate-y-1/2 bg-gray-200 hover:bg-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 10h18M3 14h18M3 18h18" /></svg></button>
+                    </div>
+                </div>
+                <div><label for="new-product-name" class="block text-sm font-medium text-gray-700">Nome do Produto</label><input type="text" id="new-product-name" required class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-product-price" class="block text-sm font-medium text-gray-700">Preço (ex: 12.50)</label><input type="number" step="0.01" id="new-product-price" required class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-barcode" class="block text-sm font-medium text-gray-700">Código de Barras (Opcional)</label><input type="text" id="new-barcode" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-category" class="block text-sm font-medium text-gray-700">Categoria (Opcional)</label><input type="text" id="new-category" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-subcategory" class="block text-sm font-medium text-gray-700">Subcategoria (Opcional)</label><input type="text" id="new-subcategory" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-subsubcategory" class="block text-sm font-medium text-gray-700">Sub-Subcategoria (Opcional)</label><input type="text" id="new-subsubcategory" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label for="new-estoque" class="block text-sm font-medium text-gray-700">Estoque (Opcional)</label><input type="number" id="new-estoque" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <button type="submit" class="w-full py-3 mt-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">Salvar Produto</button>
+            </form>
+        </div>
+    </div>
+    <div id="pair-product-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full overflow-y-auto max-h-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Casar Produto com Código de Barras</h2><button id="close-pair-product-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <div id="pair-product-scanner-container" class="relative hidden mb-4 bg-gray-200 rounded-lg scanner-container">
+                <p class="scanner-error-message text-red-500 text-sm text-center pt-2 hidden"></p>
+                <div id="pair-product-scanner-viewport" class="scanner-viewport"></div>
+                <div class="mt-2 flex justify-center"><button class="focus-btn hidden px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Focar</button></div>
+            </div>
+            <div class="space-y-4">
+                <div><label for="pair-category" class="block text-sm font-medium text-gray-700">1. Selecione a Categoria</label><select id="pair-category" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm"><option value="">-- Escolha --</option></select></div>
+                <div><label for="pair-subcategory" class="block text-sm font-medium text-gray-700">2. Selecione a Subcategoria</label><select id="pair-subcategory" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div id="pair-subsubcategory-container" class="hidden"><label for="pair-subsubcategory" class="block text-sm font-medium text-gray-700">3. Selecione a Sub-Subcategoria (Opcional)</label><select id="pair-subsubcategory" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div><label for="pair-product" class="block text-sm font-medium text-gray-700">4. Selecione o Produto</label><select id="pair-product" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div id="paired-product-info" class="p-3 bg-blue-50 rounded-lg min-h-[60px] hidden"><p class="font-semibold text-blue-800 text-sm" id="paired-product-name"></p><p class="text-xs text-gray-600" id="paired-product-cod"></p><p class="text-xs text-gray-600 mt-1" id="paired-product-current-barcode"></p></div>
+                <div>
+                    <label for="new-barcode-pair" class="block text-sm font-medium text-gray-700">5. Digite ou Escaneie o Novo Código de Barras</label>
+                    <div class="relative mt-1">
+                        <input type="text" id="new-barcode-pair" class="block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12">
+                        <button type="button" id="scan-new-barcode-pair-btn" class="absolute right-1 top-1/2 -translate-y-1/2 bg-gray-200 hover:bg-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 10h18M3 14h18M3 18h18" /></svg></button>
+                    </div>
+                </div>
+                <div><label for="new-stock-pair" class="block text-sm font-medium text-gray-700">6. Novo Estoque (Opcional)</label><input type="number" id="new-stock-pair" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <button id="save-pair-btn" class="w-full py-3 mt-4 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>Salvar Novo Código de Barras</button>
+            </div>
+        </div>
+    </div>
+    <div id="edit-barcode-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full overflow-y-auto max-h-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Editar Código de Barras</h2><button id="close-edit-barcode-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <div id="edit-barcode-scanner-container" class="relative hidden mb-4 bg-gray-200 rounded-lg scanner-container">
+                <p class="scanner-error-message text-red-500 text-sm text-center pt-2 hidden"></p>
+                <div id="edit-barcode-scanner-viewport" class="scanner-viewport"></div>
+                <div class="mt-2 flex justify-center"><button class="focus-btn hidden px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Focar</button></div>
+            </div>
+            <div class="space-y-4">
+                <div><label for="edit-category" class="block text-sm font-medium text-gray-700">1. Selecione a Categoria</label><select id="edit-category" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm"><option value="">-- Escolha --</option></select></div>
+                <div><label for="edit-subcategory" class="block text-sm font-medium text-gray-700">2. Selecione a Subcategoria</label><select id="edit-subcategory" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div id="edit-subsubcategory-container" class="hidden"><label for="edit-subsubcategory" class="block text-sm font-medium text-gray-700">3. Selecione a Sub-Subcategoria (Opcional)</label><select id="edit-subsubcategory" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div><label for="edit-product" class="block text-sm font-medium text-gray-700">4. Selecione o Produto</label><select id="edit-product" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm" disabled><option value="">-- Escolha --</option></select></div>
+                <div id="edited-product-info" class="p-3 bg-blue-50 rounded-lg min-h-[60px] hidden"><p class="font-semibold text-blue-800 text-sm" id="edited-product-name"></p><p class="text-xs text-gray-600" id="edited-product-cod"></p><p class="text-xs text-gray-600 mt-1" id="edited-product-current-barcode"></p></div>
+                <div>
+                    <label for="new-barcode-edit" class="block text-sm font-medium text-gray-700">5. Digite ou Escaneie o Novo Código de Barras</label>
+                    <div class="relative mt-1">
+                        <input type="text" id="new-barcode-edit" class="block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12">
+                        <button type="button" id="scan-new-barcode-edit-btn" class="absolute right-1 top-1/2 -translate-y-1/2 bg-gray-200 hover:bg-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 10h18M3 14h18M3 18h18" /></svg></button>
+                    </div>
+                </div>
+                <div><label for="new-stock-edit" class="block text-sm font-medium text-gray-700">6. Novo Estoque (Opcional)</label><input type="number" id="new-stock-edit" class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <button id="save-edit-btn" class="w-full py-3 mt-4 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>Salvar Alteração</button>
+            </div>
+        </div>
+    </div>
+    <div id="adjust-stock-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full overflow-y-auto max-h-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Ajustar Estoque de Produto</h2><button id="close-adjust-stock-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <div id="adjust-stock-scanner-container" class="relative hidden mb-4 bg-gray-200 rounded-lg scanner-container">
+                <p class="scanner-error-message text-red-500 text-sm text-center pt-2 hidden"></p>
+                <div id="adjust-stock-scanner-viewport" class="scanner-viewport"></div>
+                <div class="mt-2 flex justify-center"><button class="focus-btn hidden px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Focar</button></div>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label for="adjust-stock-code-input" class="block text-sm font-medium text-gray-700">1. Código do Produto</label>
+                    <div class="relative mt-1">
+                        <input type="text" id="adjust-stock-code-input" placeholder="Digite ou escaneie o código" class="block w-full px-4 py-2 text-base text-gray-700 bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12">
+                        <button type="button" id="scan-adjust-stock-btn" class="absolute right-1 top-1/2 -translate-y-1/2 bg-gray-200 hover:bg-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 10h18M3 14h18M3 18h18" /></svg></button>
+                    </div>
+                </div>
+                <div id="adjust-stock-product-info" class="p-3 bg-blue-50 rounded-lg min-h-[60px] hidden"><p class="font-semibold text-blue-800 text-sm" id="adjust-stock-product-name"></p><p class="text-xs text-gray-600 mt-1">Estoque Atual: <span id="adjust-stock-current-stock" class="font-bold"></span></p></div>
+                <div id="adjust-stock-controls" class="hidden">
+                    <label for="adjust-stock-new-stock" class="block text-sm font-medium text-gray-700 text-center">2. Nova Quantidade em Estoque</label>
+                    <div class="flex items-center justify-center gap-4 mt-2">
+                        <button type="button" id="stock-decrease-btn" class="w-12 h-12 bg-gray-200 rounded-full font-bold text-2xl flex items-center justify-center">-</button>
+                        <input type="number" id="adjust-stock-new-stock" placeholder="0" class="w-24 text-center text-2xl font-bold bg-gray-100 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button type="button" id="stock-increase-btn" class="w-12 h-12 bg-gray-200 rounded-full font-bold text-2xl flex items-center justify-center">+</button>
+                    </div>
+                </div>
+                <button id="save-stock-adjustment-btn" class="w-full py-3 mt-4 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>Salvar Novo Estoque</button>
+            </div>
+        </div>
+    </div>
+    <div id="add-user-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg"><div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Registar Novo Utilizador</h2><button id="close-add-user-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div><form id="add-user-form" class="space-y-4"><div><label for="new-username" class="block text-sm font-medium text-gray-700">Nome de Utilizador</label><input type="text" id="new-username" required class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div><div><label for="new-password" class="block text-sm font-medium text-gray-700">Senha</label><input type="password" id="new-password" required class="mt-1 block w-full px-4 py-2 text-base bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></div><div><label for="new-role" class="block text-sm font-medium text-gray-700">Função</label><select id="new-role" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 sm:text-sm"><option value="employee">Funcionário</option><option value="admin">Administrador</option></select></div><button type="submit" class="w-full py-3 mt-4 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">Salvar Utilizador</button></form></div></div>
+    <div id="export-data-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Importar & Exportar Dados</h2><button id="close-export-data-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button></div>
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Exportar Dados Locais</h3>
+                    <p class="text-sm text-gray-600 mb-3">Guarde um backup de todos os produtos, utilizadores e vendas registados neste dispositivo.</p>
+                    <button id="export-all-data-btn" class="w-full py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">Exportar Tudo (.json)</button>
+                </div>
+                <div class="border-t border-gray-200"></div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Importar Dados</h3>
+                    <p class="text-sm text-gray-600 mb-3">Substitua todos os dados locais por um arquivo de backup. <strong class="text-red-600">Atenção: esta ação não pode ser desfeita.</strong></p>
+                    <input type="file" id="import-file-input" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                    <button id="import-data-btn" class="w-full mt-3 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-all" disabled>Importar Agora</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="export-reports-modal" class="fixed inset-0 w-full h-full flex items-center justify-center hidden z-50 p-4 modal-bg">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800">Exportar Relatórios</h2>
+                <button id="close-export-reports-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="space-y-4 mt-4">
+                <button id="export-sales-report-btn" class="w-full py-3 font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-all">Exportar Vendas do Dia (CSV)</button>
+                <button id="export-stock-report-btn" class="w-full py-3 font-semibold text-white bg-orange-600 rounded-lg hover:bg-orange-700 transition-all">Exportar Ajustes de Estoque (CSV)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Caminho para o JavaScript atualizado -->
+    <script src="assets/js/app.js" defer></script>
+</body>
+</html>
