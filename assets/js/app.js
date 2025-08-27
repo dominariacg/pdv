@@ -161,10 +161,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionLogContent = document.getElementById('session-log-content');
     const scannerErrorMessages = document.querySelectorAll('.scanner-error-message');
 
+    // --- LÓGICA DE HASHING ---
     function hashPassword(password) {
         return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
     }
 
+    // --- LÓGICA DE VERSIONAMENTO ---
     function compareVersions(v1, v2) {
         const s1 = String(v1);
         const s2 = String(v2);
@@ -187,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return 0;
     }
 
+    // --- LÓGICA DE SINCRONIZAÇÃO ---
     function updateOnlineStatus() {
         const isOnline = navigator.onLine;
         if (isOnline) {
@@ -287,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- LÓGICA DE INICIALIZAÇÃO ---
     function initializeApp() {
         if (localStorage.getItem('db_initialized')) {
             checkLoggedInState();
@@ -682,11 +686,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 saleElement.className = 'relative p-3 border rounded-lg bg-gray-50';
                 const saleTimestamp = new Date(sale.timestamp);
                 const discountHtml = sale.desconto > 0 ? `<div class="text-xs text-green-600 mt-1">Desconto: - R$ ${parseFloat(sale.desconto).toFixed(2)}</div>` : '';
-                const productsHtml = sale.produtos.map(p => `<p>${p.quantity}x ${p.name}</p>`).join('');
+                
+                // Trata tanto o formato antigo (string) quanto o novo (array)
+                const productsHtml = Array.isArray(sale.produtos) 
+                    ? sale.produtos.map(p => `<p>${p.quantity}x ${p.name}</p>`).join('')
+                    : `<p>${sale.produtos}</p>`;
+
                 let deleteButtonHtml = '';
                 if (currentUser.role === 'admin') {
                     deleteButtonHtml = `<button class="delete-sale-btn absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs" data-timestamp="${sale.timestamp}">&times;</button>`;
                 }
+
                 saleElement.innerHTML = `
                     ${deleteButtonHtml}
                     <div class="flex justify-between font-semibold text-sm">
