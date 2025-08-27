@@ -730,63 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 function exportSalesToXLSX() {
-    const today = new Date().toISOString().slice(0, 10);
-    const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
 
-    if (sales.length === 0) {
-        showAlert("Nenhuma venda registada hoje para exportar.");
-        return;
-    }
-
-    const dataForSheet = [
-        ['Data/Hora', 'Vendedor', 'COD Produto', 'Descrição do Item', 'Qtd', 'Preço Unit.', 'Subtotal Item', 'Total da Venda']
-    ];
-
-    sales.forEach(sale => {
-        const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
-        const saleTotal = parseFloat(sale.valor_total).toFixed(2);
-
-        // Verifica se 'produtos' é um array (formato novo)
-        if (Array.isArray(sale.produtos)) {
-            sale.produtos.forEach(product => {
-                const subtotal = product.quantity * product.price;
-                dataForSheet.push([
-                    saleTimestamp,
-                    sale.vendedor,
-                    product.cod,
-                    product.name,
-                    product.quantity,
-                    product.price.toFixed(2),
-                    subtotal.toFixed(2),
-                    saleTotal
-                ]);
-            });
-        } 
-        // Se 'produtos' for um texto (formato antigo)
-        else if (typeof sale.produtos === 'string' && sale.produtos.length > 0) {
-            dataForSheet.push([
-                saleTimestamp,
-                sale.vendedor,
-                'N/A',
-                sale.produtos, // Coloca a descrição completa dos itens
-                'N/A',
-                'N/A',
-                'N/A',
-                saleTotal
-            ]);
-        }
-    });
-
-    if (dataForSheet.length <= 1) {
-        showAlert("Não foram encontrados dados de produtos válidos nas vendas de hoje para exportar.");
-        return;
-    }
-
-    const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas Detalhadas do Dia");
-    XLSX.writeFile(workbook, `relatorio_vendas_detalhado_${today}.xlsx`);
-}
 
     function logChange(action, details) {
         const log = DB.get('change_log');
@@ -1514,6 +1458,7 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
 
