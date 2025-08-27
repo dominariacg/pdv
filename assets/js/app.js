@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- CONFIGURAÇÕES FIXAS DE SINCRONIZAÇÃO (ATUALIZADO) ---
+    // --- CONFIGURAÇÕES FIXAS DE SINCRONIZAÇÃO ---
     const GITHUB_USER = 'dominariacg';
     const GITHUB_REPO = 'pdv';
     const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/git/ref/heads/main`;
@@ -161,26 +161,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionLogContent = document.getElementById('session-log-content');
     const scannerErrorMessages = document.querySelectorAll('.scanner-error-message');
 
-    // --- LÓGICA DE HASHING ---
     function hashPassword(password) {
         return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
     }
 
-    // --- LÓGICA DE VERSIONAMENTO ---
     function compareVersions(v1, v2) {
         const s1 = String(v1);
         const s2 = String(v2);
-
         const isV1Semantic = s1.includes('.');
         const isV2Semantic = s2.includes('.');
-
         if (isV1Semantic && !isV2Semantic) return 1;
         if (!isV1Semantic && isV2Semantic) return -1;
-        
         if (!isV1Semantic && !isV2Semantic) {
             return parseFloat(s1) > parseFloat(s2) ? 1 : -1;
         }
-
         const parts1 = s1.split('.').map(Number);
         const parts2 = s2.split('.').map(Number);
         const len = Math.max(parts1.length, parts2.length);
@@ -193,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return 0;
     }
 
-    // --- LÓGICA DE SINCRONIZAÇÃO ---
     function updateOnlineStatus() {
         const isOnline = navigator.onLine;
         if (isOnline) {
@@ -216,24 +209,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function checkForUpdates() {
         if (!navigator.onLine) return;
-        
         syncMessage.textContent = 'A verificar atualizações...';
-
         try {
             const apiResponse = await fetch(GITHUB_API_URL);
             if (!apiResponse.ok) throw new Error('Falha ao contactar a API do GitHub.');
             const refData = await apiResponse.json();
             const latestCommitHash = refData.object.sha;
             const GITHUB_DB_URL_COMMIT = `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${latestCommitHash}/assets/data/dados_offline.json`;
-
             const response = await fetch(GITHUB_DB_URL_COMMIT);
             if (!response.ok) throw new Error('Falha ao obter dados do GitHub.');
-            
             const remoteData = await response.json();
-            
             const localData = DB.get('database_info');
             const localChanges = DB.get('change_log');
-
             if (compareVersions(remoteData.version, localData.version) > 0 && localChanges.length === 0) {
                 updateNotification.classList.remove('hidden');
                 downloadUpdateBtn.classList.remove('hidden');
@@ -247,34 +234,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 downloadUpdateBtn.classList.add('hidden');
                 updateNotification.classList.add('hidden');
             }
-
         } catch (error) {
             console.error('Erro ao verificar atualizações:', error);
             syncMessage.textContent = 'Erro ao contactar o GitHub.';
         }
     }
-    
+
     async function uploadChangesToGitHub() {
         const pat = githubPatInput.value.trim();
         if (!pat) {
             showAlert('Por favor, preencha o Token de Acesso Pessoal do GitHub.');
             return;
         }
-
         if (!localChangesExist) {
             showAlert('Não existem alterações locais para enviar.');
             return;
         }
-
         const changesToUpload = {
             changes: DB.get('change_log')
         };
-        
         console.log('Enviando para o GitHub:', JSON.stringify(changesToUpload, null, 2));
-
         syncMessage.textContent = 'A enviar alterações para o GitHub Actions...';
         syncBtn.disabled = true;
-
         try {
             const response = await fetch(GITHUB_ACTIONS_URL, {
                 method: 'POST',
@@ -289,17 +270,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 })
             });
-
             if (response.status !== 204) {
                 throw new Error(`O GitHub respondeu com o status ${response.status}. Verifique as suas credenciais.`);
             }
-            
             showAlert('Pedido de atualização enviado com sucesso para o GitHub Actions! Aguarde alguns minutos para que a base de dados seja atualizada.');
             syncMessage.textContent = 'Pedido enviado. A base de dados será atualizada em breve.';
             DB.set('change_log', []);
             localChangesExist = false;
             updateSessionLogUI();
-
         } catch (error) {
             console.error('Erro no upload:', error);
             showAlert(`Ocorreu um erro ao enviar as alterações: ${error.message}`);
@@ -309,7 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LÓGICA DE INICIALIZAÇÃO ---
     function initializeApp() {
         if (localStorage.getItem('db_initialized')) {
             checkLoggedInState();
@@ -326,7 +303,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadBtn = document.getElementById('load-db-btn');
         const setupError = document.getElementById('setup-error');
         let fileContent = null;
-
         fileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file && file.name.endsWith('.json')) {
@@ -348,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 fileContent = null;
             }
         });
-
         loadBtn.addEventListener('click', () => {
             if (!fileContent) {
                 setupError.textContent = 'Nenhum ficheiro carregado.';
@@ -361,9 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     DB.set('users', data.users);
                     DB.set('vendas_log', data.vendas_log || []);
                     DB.set('change_log', []);
-                    DB.set('database_info', { version: data.version });
+                    DB.set('database_info', {
+                        version: data.version
+                    });
                     localStorage.setItem('db_initialized', 'true');
-                    
                     location.reload();
                 } else {
                     throw new Error('Ficheiro JSON inválido. Faltam as chaves "products", "users" ou "version".');
@@ -401,10 +377,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loginError.textContent = 'Utilizador e senha são obrigatórios.';
             return;
         }
-        
         const users = DB.get('users');
         const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === hashedPassword);
-
         if (user) {
             if (keepLoggedInCheckbox.checked) {
                 localStorage.setItem('loggedInUser', JSON.stringify(user));
@@ -417,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loginError.textContent = 'Utilizador ou senha inválidos.';
         }
     }
-    
+
     function logout() {
         showConfirm("Tem a certeza que deseja sair da sua conta?", (confirmed) => {
             if (confirmed) {
@@ -433,14 +407,12 @@ document.addEventListener('DOMContentLoaded', () => {
         loginView.classList.add('hidden');
         appView.classList.remove('hidden');
         currentUserInfo.textContent = `${currentUser.username} (${currentUser.role})`;
-        
         const dbInfo = DB.get('database_info');
         if (dbInfo && dbInfo.version) {
             dbVersionInfo.textContent = dbInfo.version;
         } else {
             dbVersionInfo.textContent = 'N/A';
         }
-
         const syncSection = document.getElementById('sync-section');
         if (currentUser.role === 'admin') {
             adminTabBtn.classList.remove('hidden');
@@ -459,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startNewSale();
         updateSessionLogUI();
     }
-    
+
     function switchTab(tabId) {
         tabContents.forEach(content => content.classList.add('hidden'));
         tabButtons.forEach(button => button.classList.remove('tab-active'));
@@ -479,7 +451,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const notFoundControls = document.getElementById('product-not-found-controls');
         const registerNewProductLink = document.getElementById('register-new-product-link');
         const notFoundMessage = document.getElementById('product-not-found-message');
-
         if (product) {
             currentProduct = product;
             productName.textContent = product.name;
@@ -509,7 +480,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (existingItem) {
                 existingItem.quantity += currentQuantity;
             } else {
-                currentCart.push({ ...currentProduct, quantity: currentQuantity });
+                currentCart.push({ ...currentProduct,
+                    quantity: currentQuantity
+                });
             }
             updateCartUI();
             resetProductLookup();
@@ -554,7 +527,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('Por favor, insira um valor de pagamento válido.');
             return;
         }
-        const payment = { method, amount };
+        const payment = {
+            method,
+            amount
+        };
         if (method === 'Cartão de Crédito') {
             payment.installments = installmentsSelect.value;
         }
@@ -590,19 +566,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         let discount = 0;
         const customDiscountValue = parseFloat(discountCustomAmountInput.value);
-
         if (discount5PercentCheckbox.checked) {
             discount = subtotal * 0.05;
         } else if (!isNaN(customDiscountValue) && customDiscountValue > 0) {
             discount = customDiscountValue;
         }
-
         if (discount > subtotal) {
             discount = subtotal;
         }
-
         let finalTotal = subtotal - discount;
-        
         cartSubtotalSpan.textContent = `R$ ${subtotal.toFixed(2)}`;
         if (discount > 0) {
             discountAmountSpan.textContent = `- R$ ${discount.toFixed(2)}`;
@@ -610,23 +582,19 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             discountInfo.classList.add('hidden');
         }
-
         const totalPaid = currentPayments.reduce((sum, p) => sum + p.amount, 0);
         const remaining = finalTotal - totalPaid;
-        
         cartTotal.textContent = `R$ ${finalTotal.toFixed(2)}`;
         totalPaidSpan.textContent = `R$ ${totalPaid.toFixed(2)}`;
         remainingBalanceSpan.textContent = `R$ ${remaining.toFixed(2)}`;
         remainingBalanceSpan.classList.toggle('text-red-600', remaining > 0.01);
         remainingBalanceSpan.classList.toggle('text-green-600', remaining <= 0.01);
-        
         const isFullyPaid = Math.abs(remaining) < 0.01;
         finalizeSaleBtn.disabled = currentCart.length === 0 || !isFullyPaid;
     }
 
     function finalizeSale() {
         if (currentCart.length === 0 || currentPayments.length === 0) return;
-        
         const subtotal = currentCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         let discount = 0;
         const customDiscountValue = parseFloat(discountCustomAmountInput.value);
@@ -636,14 +604,17 @@ document.addEventListener('DOMContentLoaded', () => {
             discount = customDiscountValue;
         }
         if (discount > subtotal) discount = subtotal;
-
         const finalTotal = subtotal - discount;
-
         const vendasLog = DB.get('vendas_log');
         const saleData = {
             timestamp: new Date().toISOString(),
             vendedor: currentUser.username,
-            produtos: currentCart.map(item => `${item.quantity}x ${item.name}`).join(', '),
+            produtos: currentCart.map(item => ({
+                cod: item.cod,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price
+            })),
             formas_pagamento: currentPayments.map(p => p.method).join(', '),
             valores_pagos: currentPayments.map(p => p.amount.toFixed(2)).join(', '),
             desconto: discount.toFixed(2),
@@ -651,9 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         vendasLog.push(saleData);
         DB.set('vendas_log', vendasLog);
-        
         logChange('create_sale', saleData);
-        
         let products = DB.get('products');
         currentCart.forEach(cartItem => {
             const productIndex = products.findIndex(p => p.cod === cartItem.cod);
@@ -662,7 +631,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         DB.set('products', products);
-        
         showAlert('Venda finalizada e guardada localmente!');
         startNewSale();
     }
@@ -691,11 +659,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function showHistory() {
         const selectedDate = historyDateInput.value;
         let allSales = DB.get('vendas_log');
-        
         if (selectedDate) {
             allSales = allSales.filter(sale => sale.timestamp.startsWith(selectedDate));
         }
-
         if (currentUser.role !== 'admin') {
             allSales = allSales.filter(sale => sale.vendedor === currentUser.username);
         } else {
@@ -704,22 +670,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 allSales = allSales.filter(sale => sale.vendedor === selectedUser);
             }
         }
-        
         allSales.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         historyContent.innerHTML = '';
         let totalSalesValue = 0;
-
         if (allSales.length === 0) {
             historyContent.innerHTML = '<p class="text-gray-500">Nenhuma venda registada para esta data/filtro.</p>';
         } else {
             allSales.forEach(sale => {
                 totalSalesValue += parseFloat(sale.valor_total);
                 const saleElement = document.createElement('div');
-                saleElement.className = 'p-3 border rounded-lg bg-gray-50';
+                saleElement.className = 'relative p-3 border rounded-lg bg-gray-50';
                 const saleTimestamp = new Date(sale.timestamp);
                 const discountHtml = sale.desconto > 0 ? `<div class="text-xs text-green-600 mt-1">Desconto: - R$ ${parseFloat(sale.desconto).toFixed(2)}</div>` : '';
-                
+                const productsHtml = sale.produtos.map(p => `<p>${p.quantity}x ${p.name}</p>`).join('');
+                let deleteButtonHtml = '';
+                if (currentUser.role === 'admin') {
+                    deleteButtonHtml = `<button class="delete-sale-btn absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs" data-timestamp="${sale.timestamp}">&times;</button>`;
+                }
                 saleElement.innerHTML = `
+                    ${deleteButtonHtml}
                     <div class="flex justify-between font-semibold text-sm">
                         <p>${saleTimestamp.toLocaleDateString('pt-BR')} ${saleTimestamp.toLocaleTimeString('pt-BR')}</p>
                         <p>Total: R$ ${parseFloat(sale.valor_total).toFixed(2)}</p>
@@ -731,14 +700,61 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="mt-2 text-xs">
                         <p class="font-semibold mb-1">Itens:</p>
-                        <p>${sale.produtos}</p>
+                        ${productsHtml}
                     </div>`;
                 historyContent.appendChild(saleElement);
             });
         }
         historyTotalSpan.textContent = `R$ ${totalSalesValue.toFixed(2)}`;
     }
-    
+
+    function deleteSale(timestamp) {
+        let vendasLog = DB.get('vendas_log');
+        vendasLog = vendasLog.filter(sale => sale.timestamp !== timestamp);
+        DB.set('vendas_log', vendasLog);
+        logChange('delete_sale', {
+            timestamp: timestamp
+        });
+        showAlert('Venda excluída com sucesso!');
+        showHistory();
+    }
+
+    function exportSalesToXLSX() {
+        const today = new Date().toISOString().slice(0, 10);
+        const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
+        if (sales.length === 0) {
+            showAlert("Nenhuma venda registada hoje para exportar.");
+            return;
+        }
+        const aggregatedProducts = {};
+        sales.forEach(sale => {
+            if (Array.isArray(sale.produtos)) {
+                sale.produtos.forEach(product => {
+                    if (aggregatedProducts[product.cod]) {
+                        aggregatedProducts[product.cod].quantity += product.quantity;
+                    } else {
+                        aggregatedProducts[product.cod] = {
+                            cod: product.cod,
+                            name: product.name,
+                            quantity: product.quantity
+                        };
+                    }
+                });
+            }
+        });
+        const dataForSheet = [
+            ['COD', 'Quantidade', 'Produto']
+        ];
+        for (const cod in aggregatedProducts) {
+            const product = aggregatedProducts[cod];
+            dataForSheet.push([product.cod, product.quantity, product.name]);
+        }
+        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas do Dia");
+        XLSX.writeFile(workbook, `relatorio_vendas_${today}.xlsx`);
+    }
+
     function logChange(action, details) {
         const log = DB.get('change_log');
         log.push({
@@ -787,17 +803,30 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('Já existe um produto com este código.');
             return;
         }
-        const newProduct = { cod, name, price, barcode, category, subcategory, subsubcategory, estoque, prc_total: null };
+        const newProduct = {
+            cod,
+            name,
+            price,
+            barcode,
+            category,
+            subcategory,
+            subsubcategory,
+            estoque,
+            prc_total: null
+        };
         products.push(newProduct);
         DB.set('products', products);
-        logChange('create_product', { cod: newProduct.cod, name: newProduct.name });
+        logChange('create_product', {
+            cod: newProduct.cod,
+            name: newProduct.name
+        });
         showAlert('Produto registado com sucesso localmente.');
         addProductForm.reset();
         addProductModal.classList.add('hidden');
     }
 
     function saveProductPairing(cod, newBarcode, stock, modal, refreshCallback) {
-        if(!cod || !newBarcode) {
+        if (!cod || !newBarcode) {
             showAlert('Selecione um produto e forneça um novo código de barras.');
             return;
         }
@@ -807,18 +836,18 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('Produto não encontrado para casar o código.');
             return;
         }
-        
         products[productIndex].barcode = newBarcode;
-        
         const newStock = parseInt(stock, 10);
         if (!isNaN(newStock)) {
             products[productIndex].estoque = newStock;
         }
-
         DB.set('products', products);
-        logChange('pair_product', { cod: cod, newBarcode: newBarcode, newStock: newStock });
+        logChange('pair_product', {
+            cod: cod,
+            newBarcode: newBarcode,
+            newStock: newStock
+        });
         showAlert('Código de barras e estoque atualizados com sucesso!');
-        
         refreshCallback();
     }
 
@@ -837,7 +866,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         products[productIndex].estoque = newStock;
         DB.set('products', products);
-        logChange('adjust_stock', { cod: productForStockAdjustment.cod, oldStock: products[productIndex].estoque, newStock: newStock });
+        logChange('adjust_stock', {
+            cod: productForStockAdjustment.cod,
+            oldStock: products[productIndex].estoque,
+            newStock: newStock
+        });
         showAlert('Estoque atualizado com sucesso localmente!');
         adjustStockModal.classList.add('hidden');
     }
@@ -856,65 +889,24 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('Já existe um utilizador com este nome.');
             return;
         }
-
         const hashedPassword = hashPassword(newPassword);
-        users.push({ username: newUsername, password: hashedPassword, role: newRole });
+        users.push({
+            username: newUsername,
+            password: hashedPassword,
+            role: newRole
+        });
         DB.set('users', users);
-        logChange('create_user', { username: newUsername, password: hashedPassword, role: newRole });
+        logChange('create_user', {
+            username: newUsername,
+            password: hashedPassword,
+            role: newRole
+        });
         showAlert('Utilizador registado com sucesso localmente.');
         addUserForm.reset();
         addUserModal.classList.add('hidden');
         if (document.querySelector('.tab-active').dataset.tab === 'historico-view') {
             populateUserFilter();
         }
-    }
-    
-    function exportSalesToCSV() {
-        const today = new Date().toISOString().slice(0, 10);
-        const sales = DB.get('vendas_log').filter(sale => sale.timestamp.startsWith(today));
-
-        if (sales.length === 0) {
-            showAlert("Nenhuma venda registada hoje para exportar.");
-            return;
-        }
-
-        const totals = {};
-        let allItems = [];
-
-        sales.forEach(sale => {
-            const payments = sale.formas_pagamento.split(', ');
-            const values = sale.valores_pagos.split(', ').map(parseFloat);
-
-            payments.forEach((method, index) => {
-                let key = method;
-                if (method === 'Cartão de Crédito' && sale.parcelas) {
-                    key = `Crédito (${sale.parcelas})`;
-                }
-                totals[key] = (totals[key] || 0) + values[index];
-            });
-
-            allItems.push(sale.produtos);
-        });
-
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Relatório de Vendas do Dia\r\n";
-        csvContent += `Data: ${new Date().toLocaleDateString('pt-BR')}\r\n\r\n`;
-        
-        csvContent += "Itens Vendidos:\r\n";
-        allItems.forEach(item => csvContent += `"${item}"\r\n`);
-        
-        csvContent += "\r\nTotais por Forma de Pagamento:\r\n";
-        for (const [method, total] of Object.entries(totals)) {
-            csvContent += `"${method}";"R$ ${total.toFixed(2)}"\r\n`;
-        }
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `relatorio_vendas_${today}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     }
 
     function exportStockAdjustmentsToCSV() {
@@ -937,17 +929,19 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
         document.body.removeChild(link);
     }
-    
+
     function exportAllData() {
-        const allData = { 
-            products: DB.get('products'), 
-            users: DB.get('users'), 
-            vendas_log: DB.get('vendas_log'), 
+        const allData = {
+            products: DB.get('products'),
+            users: DB.get('users'),
+            vendas_log: DB.get('vendas_log'),
             change_log: DB.get('change_log'),
             database_info: DB.get('database_info')
         };
         const jsonString = JSON.stringify(allData, null, 2);
-        const blob = new Blob([jsonString], {type: "application/json"});
+        const blob = new Blob([jsonString], {
+            type: "application/json"
+        });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -973,7 +967,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             DB.set('users', data.users);
                             DB.set('vendas_log', data.vendas_log || []);
                             DB.set('change_log', data.change_log || []);
-                            DB.set('database_info', data.database_info || { version: "0.0.0.0.0.1" });
+                            DB.set('database_info', data.database_info || {
+                                version: "0.0.0.0.0.1"
+                            });
                             localStorage.setItem('db_initialized', 'true');
                             showAlert('Dados importados com sucesso! A aplicação será recarregada.');
                             setTimeout(() => location.reload(), 1500);
@@ -993,12 +989,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const subcategorySelect = modal.querySelector('select[id*="-subcategory"]');
         const subsubcategorySelect = modal.querySelector('select[id*="-subsubcategory"]');
         const productSelect = modal.querySelector('select[id*="-product"]');
-        
         categorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         subcategorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         subsubcategorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         productSelect.innerHTML = '<option value="">-- Escolha --</option>';
-
         const products = DB.get('products');
         const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
         categories.forEach(cat => {
@@ -1009,14 +1003,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         modal.classList.remove('hidden');
     }
-    
+
     function populateSubcategoriesFor(categorySelect, subcategorySelect, subsubcategorySelect, productSelect, productList, onlyUnpaired) {
         const selectedCategory = categorySelect.value;
         subcategorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         subsubcategorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         productSelect.innerHTML = '<option value="">-- Escolha --</option>';
         if (!selectedCategory) return;
-
         const products = DB.get('products');
         const subcategories = [...new Set(products.filter(p => p.category === selectedCategory && p.subcategory).map(p => p.subcategory))].sort();
         subcategories.forEach(sub => {
@@ -1032,14 +1025,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedCategory = categorySelect.value;
         const selectedSubcategory = subcategorySelect.value;
         const subsubcategoryContainer = subsubcategorySelect.closest('div');
-        
         subsubcategorySelect.innerHTML = '<option value="">-- Escolha --</option>';
         productSelect.innerHTML = '<option value="">-- Escolha --</option>';
         if (!selectedSubcategory) return;
-
         const products = DB.get('products');
         const subsubcategories = [...new Set(products.filter(p => p.category === selectedCategory && p.subcategory === selectedSubcategory && p.subsubcategory).map(p => p.subsubcategory))].sort();
-        
         if (subsubcategories.length > 0) {
             subsubcategoryContainer.classList.remove('hidden');
             subsubcategorySelect.disabled = false;
@@ -1061,21 +1051,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedSubcategory = subcategorySelect.value;
         const selectedSubsubcategory = subsubcategorySelect.value || null;
         if (!selectedCategory || !selectedSubcategory) return;
-
         let products = DB.get('products');
-        let filteredProducts = products.filter(p => 
-            p.category === selectedCategory && 
-            p.subcategory === selectedSubcategory && 
+        let filteredProducts = products.filter(p =>
+            p.category === selectedCategory &&
+            p.subcategory === selectedSubcategory &&
             (selectedSubsubcategory ? p.subsubcategory === selectedSubsubcategory : !p.subsubcategory)
         );
-
         if (onlyUnpaired) {
             filteredProducts = filteredProducts.filter(p => !p.barcode);
         }
-        
         if (productListRef === 'pair') pairableProductsList = filteredProducts;
         else editableProductsList = filteredProducts;
-
         productSelect.innerHTML = '<option value="">-- Escolha --</option>';
         filteredProducts.sort((a, b) => a.name.localeCompare(b.name)).forEach(prod => {
             const option = document.createElement('option');
@@ -1092,7 +1078,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const codEl = productInfo.querySelector('[id*="-cod"]');
         const barcodeEl = productInfo.querySelector('[id*="-current-barcode"]');
         const saveBtn = productSelect.closest('.space-y-4').querySelector('button[id*="save-"]');
-
         if (!selectedCod) {
             productInfo.classList.add('hidden');
             saveBtn.disabled = true;
@@ -1138,7 +1123,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveStockAdjustmentBtn.disabled = true;
         }
     }
-    
+
     function showAlert(message) {
         alertMessage.textContent = message;
         alertModal.classList.remove('hidden');
@@ -1160,28 +1145,28 @@ document.addEventListener('DOMContentLoaded', () => {
     async function requestCameraPermission(target) {
         scannerTargetInput = target;
         scannerErrorMessages.forEach(el => el.classList.add('hidden'));
-
         if (!navigator.mediaDevices?.getUserMedia) {
             return showAlert('O seu navegador não suporta o acesso à câmara.');
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment'
+                }
+            });
             stream.getTracks().forEach(track => track.stop());
-
             const modal = target.closest('.modal-bg, #app-view');
             const viewport = modal.querySelector('.scanner-viewport');
             const scannerContainer = modal.querySelector('.scanner-container');
-
             if (modal.id === 'app-view') {
                 scannerModal.classList.remove('hidden');
                 startScanner('#scanner-viewport');
             } else {
-                 if (scannerContainer) {
+                if (scannerContainer) {
                     scannerContainer.classList.remove('hidden');
                 }
                 startScanner(`#${viewport.id}`);
             }
-
         } catch (error) {
             let msg = 'A permissão da câmara é necessária.';
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
@@ -1193,13 +1178,17 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Camera Error:", error);
         }
     }
-    
+
     function triggerFocus() {
         if (Quagga && isScannerActive) {
             try {
                 const track = Quagga.CameraAccess.getActiveTrack();
                 if (track && typeof track.applyConstraints === 'function') {
-                    track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+                    track.applyConstraints({
+                            advanced: [{
+                                focusMode: 'continuous'
+                            }]
+                        })
                         .then(() => console.log('Autofoco acionado.'))
                         .catch(e => console.error('Este dispositivo não suporta o controlo de foco.', e));
                 }
@@ -1210,32 +1199,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startScanner(viewportSelector) {
-        // --- MELHORIA DE FOCO: Adicionando constraints mais detalhadas ---
         const quaggaConfig = {
             inputStream: {
                 name: "Live",
                 type: "LiveStream",
                 target: document.querySelector(viewportSelector),
                 constraints: {
-                    width: { min: 640, ideal: 1280 },
-                    height: { min: 480, ideal: 720 },
+                    width: {
+                        min: 640,
+                        ideal: 1280
+                    },
+                    height: {
+                        min: 480,
+                        ideal: 720
+                    },
                     facingMode: "environment",
                     focusMode: "continuous"
                 }
             },
-            locator: { patchSize: "medium", halfSample: true },
+            locator: {
+                patchSize: "medium",
+                halfSample: true
+            },
             numOfWorkers: navigator.hardwareConcurrency || 4,
-            decoder: { readers: ["ean_reader", "upc_reader", "code_128_reader"], multiple: false },
+            decoder: {
+                readers: ["ean_reader", "upc_reader", "code_128_reader"],
+                multiple: false
+            },
             locate: true
         };
-
         Quagga.init(quaggaConfig, (err) => {
             if (err) {
                 console.error("Erro ao iniciar Quagga com constraints avançadas:", err);
-                // Tenta novamente com configurações mais simples em caso de erro
-                quaggaConfig.inputStream.constraints = { facingMode: "environment" };
+                quaggaConfig.inputStream.constraints = {
+                    facingMode: "environment"
+                };
                 Quagga.init(quaggaConfig, (fallbackErr) => {
-                    if(fallbackErr) {
+                    if (fallbackErr) {
                         showAlert('Erro ao iniciar a câmara. Verifique as permissões e se a câmara não está a ser usada por outra aplicação.');
                         return;
                     }
@@ -1243,15 +1243,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 return;
             }
-
             Quagga.start();
             isScannerActive = true;
             const container = document.querySelector(viewportSelector).closest('.modal-bg, .scanner-container');
             if (container) {
                 const focusBtn = container.querySelector('.focus-btn');
                 if (focusBtn) focusBtn.classList.remove('hidden');
-
-                // --- MELHORIA DE FOCO: Adicionando "Toque para Focar" ---
                 const viewport = container.querySelector('.scanner-viewport');
                 if (viewport) {
                     viewport.addEventListener('click', triggerFocus);
@@ -1262,7 +1259,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function stopScanner() {
         if (isScannerActive) {
-            // Remove o listener de clique para não ficar acumulando
             const viewports = document.querySelectorAll('.scanner-viewport');
             viewports.forEach(vp => vp.removeEventListener('click', triggerFocus));
             Quagga.stop();
@@ -1276,28 +1272,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result?.codeResult?.code) {
             const code = result.codeResult.code.replace(/\s/g, '');
             if (!scannerTargetInput) return;
-
             const products = DB.get('products');
             const product = products.find(p => p.cod === code || p.barcode === code);
-            
             let productShouldExist = (
-                scannerTargetInput.id === 'code-input' || 
+                scannerTargetInput.id === 'code-input' ||
                 scannerTargetInput.id === 'adjust-stock-code-input'
             );
-
             if (!productShouldExist || (productShouldExist && product)) {
                 scannerTargetInput.value = code;
                 if (scannerTargetInput.id === 'code-input') {
-                   lookupProduct(code);
+                    lookupProduct(code);
                 } else if (scannerTargetInput.id === 'adjust-stock-code-input') {
-                   lookupProductForStock(code);
+                    lookupProductForStock(code);
                 }
                 if ('vibrate' in navigator) navigator.vibrate(100);
                 stopScanner();
             } else {
                 const activeModal = scannerTargetInput.closest('.modal-bg, #app-view');
                 const errorElement = activeModal.querySelector('.scanner-error-message');
-                
                 if (errorElement) {
                     errorElement.textContent = 'Código não encontrado.';
                     errorElement.classList.remove('hidden');
@@ -1312,23 +1304,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- EVENT LISTENERS ---
     loginBtn.addEventListener('click', login);
-    passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') login(); });
+    passwordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') login();
+    });
     logoutBtnConfig.addEventListener('click', logout);
-    codeInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') lookupProduct(codeInput.value.trim()); });
+    codeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') lookupProduct(codeInput.value.trim());
+    });
     scanCodeBtn.addEventListener('click', () => requestCameraPermission(document.getElementById('code-input')));
     scanNewCodeBtn.addEventListener('click', () => requestCameraPermission(document.getElementById('new-cod')));
     addToCartBtn.addEventListener('click', addToCart);
     finalizeSaleBtn.addEventListener('click', finalizeSale);
-    clearCartBtn.addEventListener('click', () => { if (currentCart.length > 0) showConfirm("Limpar o carrinho e pagamentos?", (c) => c && startNewSale()); else startNewSale(); });
+    clearCartBtn.addEventListener('click', () => {
+        if (currentCart.length > 0) showConfirm("Limpar o carrinho e pagamentos?", (c) => c && startNewSale());
+        else startNewSale();
+    });
     exportReportsBtn.addEventListener('click', () => exportReportsModal.classList.remove('hidden'));
     closeExportReportsBtn.addEventListener('click', () => exportReportsModal.classList.add('hidden'));
-    exportSalesReportBtn.addEventListener('click', exportSalesToCSV);
+    exportSalesReportBtn.addEventListener('click', exportSalesToXLSX);
     exportStockReportBtn.addEventListener('click', exportStockAdjustmentsToCSV);
     importExportDataBtn.addEventListener('click', () => exportDataModal.classList.remove('hidden'));
     closeExportDataBtn.addEventListener('click', () => exportDataModal.classList.add('hidden'));
     exportAllDataBtn.addEventListener('click', exportAllData);
-    importFileInput.addEventListener('change', (e) => { importDataBtn.disabled = !e.target.files.length; });
-    importDataBtn.addEventListener('click', () => importAllData({ target: importFileInput }));
+    importFileInput.addEventListener('change', (e) => {
+        importDataBtn.disabled = !e.target.files.length;
+    });
+    importDataBtn.addEventListener('click', () => importAllData({
+        target: importFileInput
+    }));
     document.getElementById('register-new-product-link').addEventListener('click', () => {
         const code = codeInput.value.trim();
         addProductModal.classList.remove('hidden');
@@ -1339,38 +1342,64 @@ document.addEventListener('DOMContentLoaded', () => {
     closeAlertBtn.addEventListener('click', () => alertModal.classList.add('hidden'));
     closeScannerBtn.addEventListener('click', stopScanner);
     addProductBtn.addEventListener('click', () => addProductModal.classList.remove('hidden'));
-    closeAddProductBtn.addEventListener('click', () => { stopScanner(); addProductModal.classList.add('hidden'); });
+    closeAddProductBtn.addEventListener('click', () => {
+        stopScanner();
+        addProductModal.classList.add('hidden');
+    });
     addUserBtn.addEventListener('click', () => addUserModal.classList.remove('hidden'));
     closeAddUserBtn.addEventListener('click', () => addUserModal.classList.add('hidden'));
     addProductForm.addEventListener('submit', addNewProduct);
     addUserForm.addEventListener('submit', addNewUser);
     historyDateInput.addEventListener('change', showHistory);
     historyUserFilter.addEventListener('change', showHistory);
+    historyContent.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-sale-btn')) {
+            const timestamp = e.target.dataset.timestamp;
+            showConfirm("Tem a certeza que deseja excluir esta venda? Esta ação não pode ser desfeita.", (confirmed) => {
+                if (confirmed) {
+                    deleteSale(timestamp);
+                }
+            });
+        }
+    });
     cancelAddBtn.addEventListener('click', resetProductLookup);
-    increaseQtyBtn.addEventListener('click', () => { currentQuantity++; productQuantitySpan.textContent = currentQuantity; });
-    decreaseQtyBtn.addEventListener('click', () => { if (currentQuantity > 1) { currentQuantity--; productQuantitySpan.textContent = currentQuantity; } });
-    cartItems.addEventListener('click', (e) => { if (e.target.classList.contains('remove-from-cart-btn')) removeFromCart(e.target.dataset.code); });
+    increaseQtyBtn.addEventListener('click', () => {
+        currentQuantity++;
+        productQuantitySpan.textContent = currentQuantity;
+    });
+    decreaseQtyBtn.addEventListener('click', () => {
+        if (currentQuantity > 1) {
+            currentQuantity--;
+            productQuantitySpan.textContent = currentQuantity;
+        }
+    });
+    cartItems.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-from-cart-btn')) removeFromCart(e.target.dataset.code);
+    });
     tabButtons.forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
     addPaymentBtn.addEventListener('click', addPayment);
-    paymentEntries.addEventListener('click', (e) => { if (e.target.classList.contains('remove-payment-btn')) removePayment(parseInt(e.target.dataset.index, 10)); });
+    paymentEntries.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-payment-btn')) removePayment(parseInt(e.target.dataset.index, 10));
+    });
     paymentMethodSelect.addEventListener('change', () => installmentsContainer.classList.toggle('hidden', paymentMethodSelect.value !== 'Cartão de Crédito'));
-    
     pairProductBtn.addEventListener('click', () => openBarcodeModal(pairProductModal, pairCategorySelect, true));
     editBarcodeBtn.addEventListener('click', () => openBarcodeModal(editBarcodeModal, editCategorySelect, false));
-    
-    closePairProductBtn.addEventListener('click', () => { stopScanner(); pairProductModal.classList.add('hidden'); });
-    closeEditBarcodeBtn.addEventListener('click', () => { stopScanner(); editBarcodeModal.classList.add('hidden'); });
-    
+    closePairProductBtn.addEventListener('click', () => {
+        stopScanner();
+        pairProductModal.classList.add('hidden');
+    });
+    closeEditBarcodeBtn.addEventListener('click', () => {
+        stopScanner();
+        editBarcodeModal.classList.add('hidden');
+    });
     pairCategorySelect.addEventListener('change', () => populateSubcategoriesFor(pairCategorySelect, pairSubcategorySelect, pairSubsubcategorySelect, pairProductSelect, 'pair', true));
     pairSubcategorySelect.addEventListener('change', () => populateSubsubcategoriesFor(pairCategorySelect, pairSubcategorySelect, pairSubsubcategorySelect, pairProductSelect, 'pair', true));
     pairSubsubcategorySelect.addEventListener('change', () => populateProductsFor(pairCategorySelect, pairSubcategorySelect, pairSubsubcategorySelect, pairProductSelect, 'pair', true));
     pairProductSelect.addEventListener('change', () => showSelectedProductInfoFor(pairProductSelect, pairedProductInfo, pairableProductsList, newStockPairInput));
-
     editCategorySelect.addEventListener('change', () => populateSubcategoriesFor(editCategorySelect, editSubcategorySelect, editSubsubcategorySelect, editProductSelect, 'edit', false));
     editSubcategorySelect.addEventListener('change', () => populateSubsubcategoriesFor(editCategorySelect, editSubcategorySelect, editSubsubcategorySelect, editProductSelect, 'edit', false));
     editSubsubcategorySelect.addEventListener('change', () => populateProductsFor(editCategorySelect, editSubcategorySelect, editSubsubcategorySelect, editProductSelect, 'edit', false));
     editProductSelect.addEventListener('change', () => showSelectedProductInfoFor(editProductSelect, editedProductInfo, editableProductsList, newStockEditInput));
-
     savePairBtn.addEventListener('click', () => saveProductPairing(pairProductSelect.value, newBarcodePairInput.value.trim(), newStockPairInput.value, pairProductModal, () => {
         populateProductsFor(pairCategorySelect, pairSubcategorySelect, pairSubsubcategorySelect, pairProductSelect, 'pair', true);
         newBarcodePairInput.value = '';
@@ -1383,17 +1412,26 @@ document.addEventListener('DOMContentLoaded', () => {
         newStockEditInput.value = '';
         editedProductInfo.classList.add('hidden');
     }));
-
     scanNewBarcodePairBtn.addEventListener('click', () => requestCameraPermission(newBarcodePairInput));
     scanNewBarcodeEditBtn.addEventListener('click', () => requestCameraPermission(newBarcodeEditInput));
-    
     adjustStockBtn.addEventListener('click', openAdjustStockModal);
-    closeAdjustStockBtn.addEventListener('click', () => { stopScanner(); adjustStockModal.classList.add('hidden'); });
-    adjustStockCodeInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') lookupProductForStock(adjustStockCodeInput.value.trim()); });
+    closeAdjustStockBtn.addEventListener('click', () => {
+        stopScanner();
+        adjustStockModal.classList.add('hidden');
+    });
+    adjustStockCodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') lookupProductForStock(adjustStockCodeInput.value.trim());
+    });
     scanAdjustStockBtn.addEventListener('click', () => requestCameraPermission(adjustStockCodeInput));
     saveStockAdjustmentBtn.addEventListener('click', saveStockAdjustment);
-    stockDecreaseBtn.addEventListener('click', () => { const val = parseInt(adjustStockNewStock.value, 10) || 0; if (val > 0) adjustStockNewStock.value = val - 1; });
-    stockIncreaseBtn.addEventListener('click', () => { const val = parseInt(adjustStockNewStock.value, 10) || 0; adjustStockNewStock.value = val + 1; });
+    stockDecreaseBtn.addEventListener('click', () => {
+        const val = parseInt(adjustStockNewStock.value, 10) || 0;
+        if (val > 0) adjustStockNewStock.value = val - 1;
+    });
+    stockIncreaseBtn.addEventListener('click', () => {
+        const val = parseInt(adjustStockNewStock.value, 10) || 0;
+        adjustStockNewStock.value = val + 1;
+    });
     discount5PercentCheckbox.addEventListener('change', () => {
         if (discount5PercentCheckbox.checked) {
             discountCustomAmountInput.value = '';
@@ -1409,7 +1447,6 @@ document.addEventListener('DOMContentLoaded', () => {
     focusButtons.forEach(btn => {
         btn.addEventListener('click', triggerFocus);
     });
-    
     syncBtn.addEventListener('click', uploadChangesToGitHub);
     checkUpdateBtn.addEventListener('click', checkForUpdates);
     downloadUpdateBtn.addEventListener('click', async () => {
@@ -1421,16 +1458,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const refData = await apiResponse.json();
                     const latestCommitHash = refData.object.sha;
                     const GITHUB_DB_URL_COMMIT = `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${latestCommitHash}/assets/data/dados_offline.json`;
-
                     const response = await fetch(GITHUB_DB_URL_COMMIT);
                     if (!response.ok) throw new Error('Falha ao obter dados do GitHub.');
                     const remoteData = await response.json();
-
                     DB.set('products', remoteData.products);
                     DB.set('users', remoteData.users);
                     DB.set('vendas_log', remoteData.vendas_log || []);
                     DB.set('change_log', []);
-                    DB.set('database_info', { version: remoteData.version });
+                    DB.set('database_info', {
+                        version: remoteData.version
+                    });
                     showAlert('Base de dados atualizada com sucesso! A aplicação será recarregada.');
                     setTimeout(() => location.reload(), 1500);
                 } catch (error) {
@@ -1442,7 +1479,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
-    
-    // --- INICIA A APLICAÇÃO ---
     initializeApp();
 });
