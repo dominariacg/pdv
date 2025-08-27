@@ -739,12 +739,15 @@ function exportSalesToXLSX() {
     }
 
     const dataForSheet = [
-        ['Data/Hora', 'Vendedor', 'COD do Produto', 'Nome do Produto', 'Quantidade', 'Preço Unitário', 'Subtotal']
+        ['Data/Hora', 'Vendedor', 'COD Produto', 'Descrição do Item', 'Qtd', 'Preço Unit.', 'Subtotal Item', 'Total da Venda']
     ];
 
     sales.forEach(sale => {
+        const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
+        const saleTotal = parseFloat(sale.valor_total).toFixed(2);
+
+        // Verifica se 'produtos' é um array (formato novo)
         if (Array.isArray(sale.produtos)) {
-            const saleTimestamp = new Date(sale.timestamp).toLocaleString('pt-BR');
             sale.produtos.forEach(product => {
                 const subtotal = product.quantity * product.price;
                 dataForSheet.push([
@@ -754,14 +757,28 @@ function exportSalesToXLSX() {
                     product.name,
                     product.quantity,
                     product.price.toFixed(2),
-                    subtotal.toFixed(2)
+                    subtotal.toFixed(2),
+                    saleTotal
                 ]);
             });
+        } 
+        // Se 'produtos' for um texto (formato antigo)
+        else if (typeof sale.produtos === 'string' && sale.produtos.length > 0) {
+            dataForSheet.push([
+                saleTimestamp,
+                sale.vendedor,
+                'N/A',
+                sale.produtos, // Coloca a descrição completa dos itens
+                'N/A',
+                'N/A',
+                'N/A',
+                saleTotal
+            ]);
         }
     });
 
     if (dataForSheet.length <= 1) {
-        showAlert("Não foram encontrados produtos nas vendas de hoje para exportar.");
+        showAlert("Não foram encontrados dados de produtos válidos nas vendas de hoje para exportar.");
         return;
     }
 
@@ -1497,5 +1514,6 @@ function exportSalesToXLSX() {
     window.addEventListener('offline', updateOnlineStatus);
     initializeApp();
 });
+
 
 
