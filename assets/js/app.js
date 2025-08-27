@@ -224,7 +224,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!apiResponse.ok) throw new Error('Falha ao contactar a API do GitHub.');
             const refData = await apiResponse.json();
             const latestCommitHash = refData.object.sha;
-            // CAMINHO ATUALIZADO
             const GITHUB_DB_URL_COMMIT = `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${latestCommitHash}/assets/data/dados_offline.json`;
 
             const response = await fetch(GITHUB_DB_URL_COMMIT);
@@ -267,8 +266,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // ALTERAÇÃO: Envia apenas o 'change_log', que agora inclui as vendas.
         const changesToUpload = {
-            sales: DB.get('vendas_log'),
             changes: DB.get('change_log')
         };
         
@@ -653,6 +652,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         vendasLog.push(saleData);
         DB.set('vendas_log', vendasLog);
+        
+        // ALTERAÇÃO: Registra a venda como uma alteração para ser enviada.
+        logChange('create_sale', saleData);
         
         let products = DB.get('products');
         currentCart.forEach(cartItem => {
@@ -1386,7 +1388,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!apiResponse.ok) throw new Error('Falha ao contactar a API do GitHub.');
                     const refData = await apiResponse.json();
                     const latestCommitHash = refData.object.sha;
-                    // CAMINHO ATUALIZADO
                     const GITHUB_DB_URL_COMMIT = `https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${latestCommitHash}/assets/data/dados_offline.json`;
 
                     const response = await fetch(GITHUB_DB_URL_COMMIT);
