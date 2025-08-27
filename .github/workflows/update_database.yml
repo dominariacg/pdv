@@ -15,27 +15,41 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          # Faz o checkout com o token da action para poder fazer push depois
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      - name: Run update script
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Pull latest changes to avoid conflicts
+        run: git pull origin main --rebase
+        # O --rebase tenta reaplicar commits locais (se houver) sobre as mudanças baixadas,
+        # o que é uma estratégia limpa para este caso.
+
+      - name: Run update script to merge changes
         env:
           CHANGES_JSON: ${{ github.event.inputs.changes }}
         run: python scripts/update_script.py
 
       - name: Commit and push if there are changes
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          # Adiciona o arquivo de dados atualizado que está dentro de assets/data
-          git add assets/data/dados_offline.json
-          # Verifica se há mudanças para commitar
+          # Adiciona todos os arquivos que podem ter sido alterados
+          git add assets/data/dados_offline.json database.db
+          
+          # Verifica se o script realmente fez alguma alteração
           if git diff --staged --quiet; then
-            echo "Nenhuma alteração para commitar."
+            echo "Nenhuma alteração detectada para commitar."
           else
-            git commit -m "Atualiza dados_offline.json via Action"
-            git push
+            git commit -m "Merge de dados via Action"
+            # Tenta fazer o push. Se outra action fez push enquanto esta rodava,
+            # o pull anterior já deve ter resolvido a maior parte dos problemas.
+            git push origin main
           fi
